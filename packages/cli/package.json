@@ -1,0 +1,37 @@
+{
+  "name": "pingpal",
+  "version": "0.1.0",
+  "description": "PingPal — ambient messaging for CLI coders. Little ASCII faces + 90-char pings that surface inside your Claude Code session.",
+  "license": "MIT",
+  "type": "module",
+  "bin": {
+    "pingpal": "./dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist",
+    "hook"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pingpal/daemon": "workspace:*",
+    "@pingpal/faces": "workspace:*",
+    "@pingpal/mcp": "workspace:*",
+    "@pingpal/protocol": "workspace:*",
+    "commander": "^12.1.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

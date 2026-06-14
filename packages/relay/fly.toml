@@ -1,0 +1,31 @@
+# Fly.io config for the PingPal relay.
+#
+# One-time setup (run from the repo root):
+#   fly launch --no-deploy --copy-config --dockerfile packages/relay/Dockerfile
+#   fly deploy --config packages/relay/fly.toml --dockerfile packages/relay/Dockerfile
+#
+# Rename `app` to your own unique name before deploying. Clients then point at
+# wss://<app>.fly.dev via the PINGPAL_RELAY env var.
+#
+# Alternatives: this same Dockerfile deploys cleanly on Railway or Render —
+# point the platform at packages/relay/Dockerfile and expose $PORT (8787).
+
+app = "pingpal-relay"
+primary_region = "iad"
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  PORT = "8787"
+
+[http_service]
+  internal_port = 8787
+  force_https = true
+  auto_stop_machines = "suspend"
+  auto_start_machines = true
+  min_machines_running = 0
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"

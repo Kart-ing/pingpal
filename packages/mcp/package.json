@@ -1,0 +1,41 @@
+{
+  "name": "@pingpal/mcp",
+  "version": "0.1.0",
+  "description": "PingPal MCP server (stdio) — exposes whos_online / list_pings / send_ping to Claude Code, talking to the local pingpald daemon over IPC.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "pingpal-mcp": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/bin.js",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.29.0",
+    "@pingpal/faces": "workspace:*",
+    "@pingpal/protocol": "workspace:*",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.0",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

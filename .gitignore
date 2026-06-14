@@ -2,6 +2,7 @@ node_modules/
 dist/
 *.tsbuildinfo
 .pingpal/
+.smoke/
 .DS_Store
 coverage/
 .env

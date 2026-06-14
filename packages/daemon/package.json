@@ -1,0 +1,43 @@
+{
+  "name": "@pingpal/daemon",
+  "version": "0.1.0",
+  "description": "pingpald — the per-machine PingPal daemon: relay client, mDNS LAN discovery, presence, ping buffer, and a local Unix-socket IPC server.",
+  "license": "MIT",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "pingpald": "./dist/bin.js"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/bin.js --foreground",
+    "test": "vitest run",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@pingpal/protocol": "workspace:*",
+    "bonjour-service": "^1.2.1",
+    "ws": "^8.18.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@pingpal/relay": "workspace:*",
+    "@types/node": "^20.14.0",
+    "@types/ws": "^8.5.12",
+    "typescript": "^5.5.4",
+    "vitest": "^2.0.5"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
