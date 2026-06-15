@@ -15,6 +15,7 @@ import { pingsCommand } from "./commands/pings.js";
 import { statuslineCommand } from "./commands/statusline.js";
 import { chatCommand } from "./commands/chat.js";
 import { launchCommand } from "./commands/launch.js";
+import { inviteCommand } from "./commands/invite.js";
 
 const paths = resolvePaths();
 
@@ -70,10 +71,12 @@ program
 
 program
   .command("join")
-  .description("switch to a room (and restart the daemon)")
+  .description("join a room from an invite (guided first-run), or switch rooms")
   .argument("<room>", "the room code to join")
   .option("--handle <handle>", "set/override your handle while joining")
-  .action((room: string, opts: { handle?: string }) =>
+  .option("--relay <url>", "relay URL from an invite (ws:// or wss://)")
+  .option("--face <id>", "a preset face id (skips the face prompt)")
+  .action((room: string, opts: { handle?: string; relay?: string; face?: string }) =>
     run(() => joinCommand(paths, room, opts)),
   );
 
@@ -96,6 +99,12 @@ program
   .command("whoami")
   .description("print your current handle, room, and face")
   .action(() => run(() => whoamiCommand(paths)));
+
+program
+  .command("invite")
+  .description("print a shareable invite (room code + relay + join command)")
+  .option("--short", "print only the one-line join command")
+  .action((opts: { short?: boolean }) => run(() => inviteCommand(paths, opts)));
 
 program
   .command("pings")

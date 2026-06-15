@@ -47,12 +47,59 @@ That's it. From now on:
 
 ---
 
+## Inviting teammates
+
+A room is just a shared, unguessable **room code** plus a **relay** everyone can
+reach. To bring someone in, generate an invite:
+
+```bash
+pingpal invite
+```
+
+```
+  📨  PingPal invite
+  room code:  our-team-hunter2
+  relay:      wss://relay.example.com
+  Send a teammate this — they run it, pick a handle + face, and they're in:
+
+    npx pingpal join our-team-hunter2 --relay wss://relay.example.com --handle <your-handle>
+```
+
+`pingpal invite` is the **only** place the room code is shown in full (everywhere
+else masks it — sharing the secret is a deliberate act). Send that line to your
+teammate. When they run it, PingPal walks them through a short guided first-run —
+pick a handle, choose a face — then connects them and starts their daemon:
+
+```bash
+npx pingpal join our-team-hunter2 --relay wss://relay.example.com
+#   👋  Welcome to PingPal — let's get you into the room.
+#   Your handle: ▸ sarah
+#   Pick a face: ▸ ( =◕ᆽ◕= ) cat
+#   connected. `pingpal status` to see who's around, `pingpal chat` to talk.
+```
+
+That's the whole sign-up: one command, two prompts, in.
+
+> **Reachability matters.** The relay in your invite has to be reachable by the
+> person joining:
+> - **Same Wi-Fi / LAN?** You don't even need a shared relay — PingPal
+>   auto-discovers same-network peers over mDNS. The room code + `pingpal join`
+>   is enough.
+> - **Remote teammates?** You need a relay both of you can reach over the
+>   internet. `pingpal invite` warns you when your relay is `localhost` (it can't
+>   be reached off your machine). Deploy one (see
+>   [Self-hosting the relay](#self-hosting-the-relay)) and set `PINGPAL_RELAY`,
+>   then re-invite.
+
+---
+
 ## The CLI
 
 | Command | What it does |
 | --- | --- |
 | `pingpal init` | Prompt for handle / room / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. |
-| `pingpal join <room>` | Switch (or set) your room and bounce the daemon so it reconnects. `--handle` to change your handle too. |
+| `pingpal join <room>` | Join a room from an invite (guided first-run: prompts for handle + face), or switch rooms. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
+| `pingpal invite` | Print a shareable invite — room code + relay + a copy-paste `join` command. The one place the room code is shown in full. `--short` for just the command. |
 | `pingpal start` | Start the background daemon (`pingpald`) if it isn't already up. |
 | `pingpal stop` | Stop the daemon. |
 | `pingpal status` | Show daemon + relay + LAN status and a who's-online roster. |
