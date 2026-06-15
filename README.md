@@ -51,28 +51,32 @@ That's it. From now on:
 
 ## Bring a friend — 2 minutes
 
+PingPal ships with a **default public relay**, so there's nothing to host — you
+and your friend just need to share a room code.
+
 **You (host):** create an invite and send the line it prints.
 
 ```bash
 pingpal invite
 #   room code:  our-room-7f3a
-#   relay:      wss://<your-relay>.fly.dev
-#     npx pingpal join our-room-7f3a --relay wss://<your-relay>.fly.dev --handle <your-handle>
+#   relay:      wss://pingpal-relay-production.up.railway.app   (the default)
+#     npx pingpal join our-room-7f3a --handle <your-handle>
 ```
 
-**Your friend:** install, then paste that line. A short wizard asks for their
-handle + face, then connects them.
+**Your friend:** install, then join. A short wizard asks for their handle + face,
+then connects them.
 
 ```bash
 npm install -g pingpal
-pingpal join our-room-7f3a --relay wss://<your-relay>.fly.dev
+pingpal join our-room-7f3a
 #   👋  Welcome to PingPal — let's get you into the room.
 #   connected. `pingpal status` to see who's around, `pingpal chat` to talk.
 ```
 
 Now you're both in the room: pings surface in each other's Claude Code, and
-`pingpal chat` is a live group chat. Same Wi-Fi? You don't even need a relay —
-PingPal auto-discovers same-network peers over mDNS.
+`pingpal chat` is a live group chat. **Messages are end-to-end encrypted** — even
+whoever runs the relay can't read them. Prefer your own relay (or same-Wi-Fi
+mDNS, no relay at all)? See [Self-hosting the relay](#self-hosting-the-relay).
 
 ---
 
@@ -280,7 +284,7 @@ The same Dockerfile deploys cleanly on Railway/Render too. See
 
 | Variable | Effect |
 | --- | --- |
-| `PINGPAL_RELAY` | Relay WebSocket URL. Overrides `relayUrl` in config. Defaults to the documented placeholder `wss://relay.pingpal.dev` — replace it with your instance or the public one. |
+| `PINGPAL_RELAY` | Relay WebSocket URL. Overrides `relayUrl` in config. Defaults to the public instance `wss://pingpal-relay-production.up.railway.app` — set this to point at your own self-hosted relay. |
 | `PINGPAL_HOME` | Base directory for PingPal's state (default `~/.pingpal`). |
 | `NO_COLOR` | Honoured by the face renderer for color-free output. |
 | `CLAUDE_HOME` | Override the base dir for the Claude Code config that `init` writes (handy for dry runs). |

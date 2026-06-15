@@ -12,7 +12,7 @@ import type { PingPalPaths } from "./paths.js";
  * `PINGPAL_RELAY` (or `relayUrl` in config.json) to their own instance, and the
  * project README points at the public instance the maintainer hosts.
  */
-export const DEFAULT_RELAY_URL = "wss://relay.pingpal.dev" as const;
+export const DEFAULT_RELAY_URL = "wss://pingpal-relay-production.up.railway.app" as const;
 
 /**
  * On-disk config shape (`~/.pingpal/config.json`), written by `pingpal init`.
