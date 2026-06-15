@@ -21,29 +21,58 @@ by asking Claude to send a ping for you.
 
 ---
 
-## Quickstart
+## Install
 
 ```bash
-# 1. Set your handle, room, and face — and wire up Claude Code (hook + MCP).
-npx pingpal init
-
-# 2. Join a room (a shared, unguessable code is the v1 secret).
-npx pingpal join our-team-hunter2
-
-# 3. Start the background daemon and get coding.
-npx pingpal start
+npm install -g pingpal
 ```
 
-> **Tip:** for the daemon and Claude Code integrations to persist, install
-> PingPal so it lives at a stable path: `npm i -g pingpal`. `npx` is great for a
-> one-off `init`, but the daemon needs to stick around.
+> Installing globally (rather than `npx` each time) matters here: PingPal runs a
+> small background daemon and wires itself into Claude Code, so it needs to live
+> at a stable path. Node 18+.
+
+## Quickstart — you in 1 minute
+
+```bash
+pingpal init                 # pick a handle + face; wires up Claude Code (hook + MCP + status line)
+pingpal join our-room-7f3a   # join a room (the code is the shared secret)
+pingpal start                # launch the background daemon
+```
 
 That's it. From now on:
 
-- Incoming pings pop into your Claude Code session as a face + bubble.
-- Ask Claude to reply — _"reply to sarah: on it, pushing now"_ — and the MCP
-  `send_ping` tool delivers it.
-- `pingpal status` shows who's online; `pingpal whoami` shows your identity.
+- **Incoming pings** pop into your Claude Code session as a face + bubble (and
+  show on your next prompt).
+- **Reply from Claude** — _"ping sarah: on it, pushing now"_ — the MCP
+  `send_ping` tool delivers it. Messages are **end-to-end encrypted**.
+- **`pingpal chat`** opens a full-screen group-chat window (faces, history,
+  presence). **`pingpal status`** shows who's online; the **status line** keeps a
+  live roster on the side.
+
+## Bring a friend — 2 minutes
+
+**You (host):** create an invite and send the line it prints.
+
+```bash
+pingpal invite
+#   room code:  our-room-7f3a
+#   relay:      wss://<your-relay>.fly.dev
+#     npx pingpal join our-room-7f3a --relay wss://<your-relay>.fly.dev --handle <your-handle>
+```
+
+**Your friend:** install, then paste that line. A short wizard asks for their
+handle + face, then connects them.
+
+```bash
+npm install -g pingpal
+pingpal join our-room-7f3a --relay wss://<your-relay>.fly.dev
+#   👋  Welcome to PingPal — let's get you into the room.
+#   connected. `pingpal status` to see who's around, `pingpal chat` to talk.
+```
+
+Now you're both in the room: pings surface in each other's Claude Code, and
+`pingpal chat` is a live group chat. Same Wi-Fi? You don't even need a relay —
+PingPal auto-discovers same-network peers over mDNS.
 
 ---
 
@@ -217,13 +246,32 @@ nothing long-term and needs no database. Point clients at your instance with the
 `PINGPAL_RELAY` environment variable.
 
 ```bash
-# Run it locally…
-node packages/relay/dist/index.js
-# …or with Docker.
-docker build -t pingpal-relay packages/relay && docker run -p 8080:8080 pingpal-relay
+# Run it locally (listens on :8787)…
+PORT=8787 node packages/relay/dist/bin.js
+
+# …or with Docker (build from the repo root — the relay needs the workspace):
+docker build -f packages/relay/Dockerfile -t pingpal-relay .
+docker run -p 8787:8787 pingpal-relay
 ```
 
-A `fly.toml` is included for one-command Fly.io deploys. See
+**One-command Fly.io deploy** (the easiest way to get a real `wss://` URL your
+remote teammates can reach):
+
+```bash
+# one-time: curl -L https://fly.io/install.sh | sh   &&   fly auth login
+bash scripts/deploy-relay.sh pingpal-relay-<you>     # global name; pick a unique one
+# → prints wss://pingpal-relay-<you>.fly.dev
+```
+
+Then either point clients at it per-session (`export PINGPAL_RELAY=wss://…`), or
+bake it in as the default for everyone and republish:
+
+```bash
+node scripts/set-default-relay.mjs wss://pingpal-relay-<you>.fly.dev
+pnpm -r build && bash scripts/publish.sh
+```
+
+The same Dockerfile deploys cleanly on Railway/Render too. See
 `packages/relay/README.md` for details.
 
 ---
