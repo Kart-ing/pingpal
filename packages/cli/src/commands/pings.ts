@@ -52,7 +52,8 @@ export async function pingsCommand(
     return 1;
   }
 
-  const unread = (pings ?? []).filter((p) => p && p.read === false);
+  // Only incoming unread pings — our own sent (outbound) ones never "arrive".
+  const unread = (pings ?? []).filter((p) => p && p.read === false && !p.outbound);
   if (unread.length === 0) {
     if (!opts.quietWhenEmpty) process.stdout.write("pingpal: no new pings.\n");
     return 0;

@@ -43,6 +43,26 @@ export class PingBuffer {
     return true;
   }
 
+  /**
+   * Record a ping WE sent, so the chat view can show both sides of a
+   * conversation. Stored already-read and flagged `outbound:true` so the
+   * notification hook (which surfaces incoming mail) ignores it. Idempotent by id.
+   */
+  recordSent(ping: Ping, via: "lan" | "relay"): boolean {
+    if (this.seen.has(ping.id)) return false;
+    this.seen.add(ping.id);
+
+    const entry: BufferedPing = { ...ping, read: true, via, outbound: true };
+    this.buffer.push(entry);
+    if (this.buffer.length > MAX_BUFFERED) {
+      const dropped = this.buffer.shift();
+      if (dropped) this.seen.delete(dropped.id);
+    }
+
+    void this.persist(entry);
+    return true;
+  }
+
   /** Snapshot of buffered pings, newest last. Optionally mark them all read. */
   list(markRead = false): BufferedPing[] {
     const snapshot = this.buffer.map((p) => ({ ...p }));

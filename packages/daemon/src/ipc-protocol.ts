@@ -39,11 +39,13 @@ export const mergedPeerSchema = z.object({
 });
 export type MergedPeer = z.infer<typeof mergedPeerSchema>;
 
-/** A received ping plus its local read/unread flag. */
+/** A buffered ping plus local metadata (read flag, transport, direction). */
 export const bufferedPingSchema = pingSchema.extend({
   read: z.boolean(),
-  /** Which transport the ping arrived on. */
+  /** Which transport the ping arrived on (or was sent over). */
   via: z.enum(["lan", "relay"]),
+  /** True for pings WE sent (kept for the chat view; ignored by the hook). */
+  outbound: z.boolean().optional(),
 });
 export type BufferedPing = z.infer<typeof bufferedPingSchema>;
 

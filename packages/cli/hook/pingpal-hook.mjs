@@ -115,7 +115,8 @@ async function main() {
     quiet();
   }
 
-  const unread = (pings ?? []).filter((p) => p && p.read === false);
+  // Surface only INCOMING unread pings — never our own sent (outbound) ones.
+  const unread = (pings ?? []).filter((p) => p && p.read === false && !p.outbound);
   if (unread.length === 0) quiet();
 
   const blocks = unread.map((p) =>

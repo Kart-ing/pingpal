@@ -13,6 +13,8 @@ import { startDaemon, statusDaemon, stopDaemon } from "./commands/daemon-control
 import { whoamiCommand } from "./commands/whoami.js";
 import { pingsCommand } from "./commands/pings.js";
 import { statuslineCommand } from "./commands/statusline.js";
+import { chatCommand } from "./commands/chat.js";
+import { launchCommand } from "./commands/launch.js";
 
 const paths = resolvePaths();
 
@@ -115,6 +117,16 @@ program
   .command("statusline")
   .description("print a one-line live who's-online roster (for a Claude Code statusLine)")
   .action(() => run(() => statuslineCommand(paths)));
+
+program
+  .command("chat")
+  .description("open the full-screen group-chat TUI for your room")
+  .action(() => run(() => chatCommand(paths)));
+
+program
+  .command("launch")
+  .description("open the chat TUI in a new terminal window (used by the /pingpal command)")
+  .action(() => run(() => launchCommand()));
 
 program.parseAsync(process.argv).catch((err: unknown) => {
   process.stderr.write(`pingpal: ${err instanceof Error ? err.message : String(err)}\n`);

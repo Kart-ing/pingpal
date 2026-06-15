@@ -58,6 +58,8 @@ That's it. From now on:
 | `pingpal status` | Show daemon + relay + LAN status and a who's-online roster. |
 | `pingpal pings` | Show unread pings as ASCII faces and mark them read. `--announce` / `--quiet-when-empty` make it a clean unit for `/loop`. |
 | `pingpal statusline` | Print a one-line live who's-online roster, for use as a Claude Code `statusLine` (see below). |
+| `pingpal chat` | Open the full-screen group-chat TUI for your room — faces, live scrollback, an input line. `@name <msg>` to DM, Enter to send, `q` to quit. |
+| `pingpal launch` | Open `pingpal chat` in a new terminal window (or, inside a VS Code / Cursor integrated terminal, tell you to run it in a split). Backs the `/pingpal` command. |
 | `pingpal whoami` | Print your current handle, room, and face. |
 
 `pingpal init` takes flags to skip the prompts:

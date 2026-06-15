@@ -212,6 +212,11 @@ export class Daemon {
         ? await this.deliverBroadcast(ping)
         : await this.deliverDirected(to, ping);
 
+    // Record our own outgoing ping so the chat view can show both sides of a
+    // conversation. Stored read + outbound, so the notification hook ignores it.
+    // ("none"/undelivered is recorded as relay — the path it was attempted on.)
+    this.buffer.recordSent(ping, result.via === "lan" ? "lan" : "relay");
+
     return { id: ping.id, via: result.via, delivered: result.delivered };
   }
 
