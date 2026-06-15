@@ -4,6 +4,9 @@ import {
   newId,
   validatePingText,
   handleSchema,
+  deriveRoomKey,
+  seal,
+  open as openSealed,
   type Ping,
 } from "@pingpal/protocol";
 import type { ResolvedConfig } from "./config.js";
@@ -53,6 +56,8 @@ export class Daemon {
   private readonly nodeId = newId("node");
   private readonly now: () => number;
   private readonly spawnNotify: (command: string) => void;
+  /** E2E key derived from the room code; messages are sealed/opened with it. */
+  private readonly roomKey: Buffer;
 
   private relay: RelayTransport | null = null;
   private lanMesh: LanMesh | null = null;
@@ -67,6 +72,7 @@ export class Daemon {
     deps: DaemonDeps = {},
   ) {
     this.now = deps.now ?? (() => Date.now());
+    this.roomKey = deriveRoomKey(config.roomCode);
     this.presence = new PresenceStore(config.handle);
     this.buffer = new PingBuffer(paths);
     this.ipc = new IpcServer(paths, (req) => this.handleIpc(req));
@@ -171,7 +177,11 @@ export class Daemon {
   // -------------------------------------------------------------------------
 
   private onInboundPing(ping: Ping, via: "lan" | "relay"): void {
-    const added = this.buffer.add(ping, via);
+    // Decrypt an end-to-end payload into plaintext for local use. If it can't be
+    // opened (wrong room key, tampering, unknown format), surface a placeholder
+    // rather than dropping it silently — a message arrived, we just can't read it.
+    const local = this.decryptInbound(ping);
+    const added = this.buffer.add(local, via);
     if (added && this.config.notifyCommand) {
       try {
         this.spawnNotify(this.config.notifyCommand);
@@ -179,6 +189,19 @@ export class Daemon {
         /* best-effort: a broken notify command must not crash the daemon */
       }
     }
+  }
+
+  /**
+   * Turn a wire ping into its local form: if it carries an `enc` payload, open it
+   * with the room key into a plaintext `text`. Returns a ping with `text` set and
+   * `enc` stripped. An undecryptable payload becomes a clear placeholder so it's
+   * still visible (a message arrived) without leaking that we failed.
+   */
+  private decryptInbound(ping: Ping): Ping {
+    if (ping.enc == null) return ping; // already plaintext
+    const text = openSealed(ping.enc, this.roomKey);
+    const { enc: _enc, ...rest } = ping;
+    return { ...rest, text: text ?? "🔒 [encrypted — can't decrypt with this room]" };
   }
 
   // -------------------------------------------------------------------------
@@ -198,26 +221,26 @@ export class Daemon {
     if (!check.ok) throw new DeliveryError("text_too_long", check.reason);
 
     const to = this.resolveTarget(rawTo);
-    const ping: Ping = {
-      type: "ping",
-      id: newId("ping"),
-      from: this.config.handle,
-      to,
-      text,
-      ts: this.now(),
-    };
+    const id = newId("ping");
+    const ts = this.now();
+    const base = { type: "ping" as const, id, from: this.config.handle, to, ts };
+
+    // Local form keeps plaintext (for our own chat history). The WIRE form carries
+    // only the sealed `enc` payload — the relay/peers never see our plaintext.
+    const localPing: Ping = { ...base, text };
+    const wirePing: Ping = { ...base, enc: seal(text, this.roomKey) };
 
     const result =
       to === null
-        ? await this.deliverBroadcast(ping)
-        : await this.deliverDirected(to, ping);
+        ? await this.deliverBroadcast(wirePing)
+        : await this.deliverDirected(to, wirePing);
 
-    // Record our own outgoing ping so the chat view can show both sides of a
-    // conversation. Stored read + outbound, so the notification hook ignores it.
+    // Record our own outgoing ping (plaintext, locally) so the chat view can show
+    // both sides. Stored read + outbound, so the notification hook ignores it.
     // ("none"/undelivered is recorded as relay — the path it was attempted on.)
-    this.buffer.recordSent(ping, result.via === "lan" ? "lan" : "relay");
+    this.buffer.recordSent(localPing, result.via === "lan" ? "lan" : "relay");
 
-    return { id: ping.id, via: result.via, delivered: result.delivered };
+    return { id, via: result.via, delivered: result.delivered };
   }
 
   /** Normalise a target handle; throws {@link DeliveryError} on a bad handle. */

@@ -17,7 +17,18 @@ describe("PingBuffer outbound (sent) messages", () => {
     dir = mkdtempSync(join(tmpdir(), "pp-buf-"));
     buf = new PingBuffer(resolvePaths(dir));
   });
-  afterEach(() => rmSync(dir, { recursive: true, force: true }));
+  afterEach(() => {
+    // recordSent/add persist to disk asynchronously (fire-and-forget); a write
+    // can land mid-delete and yield ENOTEMPTY. Retry the cleanup a few times.
+    for (let i = 0; i < 5; i++) {
+      try {
+        rmSync(dir, { recursive: true, force: true });
+        return;
+      } catch {
+        /* retry */
+      }
+    }
+  });
 
   it("records a sent ping as read + outbound", () => {
     buf.recordSent(ping("a", "me"), "relay");

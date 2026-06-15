@@ -83,10 +83,30 @@ export const pingSchema = z.object({
   id: z.string().min(1),
   from: handleSchema,
   to: handleSchema.nullable(),
-  text: pingTextSchema,
+  /**
+   * Plaintext message. Present on plaintext pings and on the LOCAL view of a
+   * decrypted ping; OMITTED on the wire when `enc` is set (end-to-end mode), so
+   * the relay never sees plaintext. The 90-char cap is enforced here and checked
+   * on the *plaintext* before sealing. Exactly one of `text`/`enc` is set — see
+   * {@link pingHasMessage}; kept as a plain object (not refined) so it can be a
+   * `z.discriminatedUnion` member.
+   */
+  text: pingTextSchema.optional(),
+  /**
+   * End-to-end-encrypted payload (base64 AES-256-GCM blob, see crypto.ts). When
+   * present, the relay forwards it opaquely and cannot read the message;
+   * recipients decrypt it back into `text` locally. Length-bounded so a relay can
+   * still reject absurd blobs (90 chars of UTF-8 seals well under this).
+   */
+  enc: z.string().min(1).max(512).optional(),
   /** epoch-ms timestamp of when the ping was created. */
   ts: z.number().int().nonnegative(),
 });
+
+/** A ping is well-formed iff it carries exactly one of `text` / `enc`. */
+export function pingHasMessage(p: { text?: unknown; enc?: unknown }): boolean {
+  return (p.text != null) !== (p.enc != null);
+}
 
 /** Acknowledgement that a message with the given id was received. */
 export const ackSchema = z.object({

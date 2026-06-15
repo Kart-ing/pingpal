@@ -2,7 +2,13 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { mkdtemp, rm, readFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { MAX_PING_CHARS, type Peer, type Ping } from "@pingpal/protocol";
+import {
+  MAX_PING_CHARS,
+  deriveRoomKey,
+  open,
+  type Peer,
+  type Ping,
+} from "@pingpal/protocol";
 import { Daemon } from "./daemon.js";
 import { resolvePaths, type PingPalPaths } from "./paths.js";
 import { resolveConfig, type ResolvedConfig } from "./config.js";
@@ -96,8 +102,12 @@ describe("daemon IPC round-trip (mocked relay)", () => {
     const out = fake.sent[0]!;
     expect(out.from).toBe("me");
     expect(out.to).toBe("sarah");
-    expect(out.text).toBe("on it");
     expect(out.ts).toBe(1234);
+    // E2E: the wire ping carries ciphertext, NOT plaintext — a relay must not be
+    // able to read it. The sealed payload decrypts back with the room key.
+    expect(out.text).toBeUndefined();
+    expect(typeof out.enc).toBe("string");
+    expect(open(out.enc!, deriveRoomKey("room-secret-1234"))).toBe("on it");
   });
 
   it("treats an omitted/empty target as a room broadcast", async () => {

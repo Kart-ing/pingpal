@@ -64,7 +64,9 @@ export async function pingsCommand(
     return renderPing({
       handle: p.from,
       ...(faceId ? { faceId } : {}),
-      text: p.text,
+      // Buffered pings are decrypted to plaintext by the daemon; default guards
+      // the (shouldn't-happen) case of a stored ping without text.
+      text: p.text ?? "🔒 [encrypted]",
       status: "online",
       lastSeenText: formatRelative(p.ts),
     });

@@ -46,3 +46,5 @@ export {
 } from "./framing.js";
 
 export { newId } from "./id.js";
+
+export { deriveRoomKey, seal, open, looksSealed } from "./crypto.js";
