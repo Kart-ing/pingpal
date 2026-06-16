@@ -55,6 +55,7 @@ program
   .option("--no-mcp", "skip registering the MCP server")
   .option("--no-statusline", "skip wiring the live who's-online status line")
   .option("--force", "overwrite an existing status line / Kickbacks chain slot")
+  .option("--codex", "also wire up Codex (MCP server + UserPromptSubmit hook)")
   .action(
     (opts: {
       handle?: string;
@@ -64,6 +65,7 @@ program
       mcp: boolean;
       statusline: boolean;
       force?: boolean;
+      codex?: boolean;
     }) => {
       const init: InitOptions = {
         handle: opts.handle,
@@ -73,6 +75,7 @@ program
         noMcp: opts.mcp === false,
         noStatusline: opts.statusline === false,
         force: opts.force,
+        codex: opts.codex,
       };
       return run(() => initCommand(paths, init));
     },

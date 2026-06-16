@@ -135,7 +135,7 @@ That's the whole sign-up: one command, two prompts, in.
 
 | Command | What it does |
 | --- | --- |
-| `pingpal init` | Prompt for handle / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. Room is optional — use `--room` only for scripted/legacy setups. |
+| `pingpal init` | Prompt for handle / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. Room is optional — use `--room` only for scripted/legacy setups. `--codex` also wires up Codex. |
 | `pingpal start-room` | Create a new room (Meet-style): mints a fresh, ephemeral join code (e.g. `vmw-qkzt-ph`), starts the daemon, and prints the command teammates use to join. `--relay` to specify which relay hosts the room. |
 | `pingpal join <code>` | Join a room by its short code (guided first-run: prompts for handle + face), or **switch rooms**. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
 | `pingpal leave` | Leave the current room — stops the daemon and clears the room from config (keeps your handle + face). Rejoin with `pingpal join <code>`. |
@@ -244,6 +244,11 @@ dependency bins aren't on your `PATH`.
 > sessions. Place `pingpal.ts` in `~/.config/opencode/plugins/` and OpenCode
 > auto-loads it — no MCP server needed on that side. Pings also surface as
 > system notifications when your session goes idle.
+>
+> **Also works with Codex!** Run `pingpal init --codex` to register the PingPal
+> MCP server in `~/.codex/config.toml` and install a `UserPromptSubmit` hook
+> that surfaces unread pings inside Codex sessions. Codex then gets
+> `whos_online`, `list_pings`, and `send_ping` tools natively.
 
 ---
 

@@ -21,6 +21,11 @@ import { mcpBin } from "../resolve-bins.js";
 import { updateConfig } from "../config-store.js";
 import { facePreview, isInteractive, promptFace, promptValidated } from "../prompt.js";
 import { installStatusline } from "./statusline-install.js";
+import {
+  codexAvailable,
+  installCodexHook,
+  registerCodexMcp,
+} from "../codex-settings.js";
 
 export interface InitOptions {
   handle?: string;
@@ -34,6 +39,8 @@ export interface InitOptions {
   noStatusline?: boolean;
   /** Overwrite an occupied status-line / Kickbacks chain slot. */
   force?: boolean;
+  /** Also install for Codex (MCP + hook). */
+  codex?: boolean;
 }
 
 /** Quote a path for embedding in a shell `command` string (hook entries run via a shell). */
@@ -178,6 +185,35 @@ export async function initCommand(
         `• couldn't wire the status-line roster (${err instanceof Error ? err.message : String(err)}); ` +
           `set it up later with \`pingpal statusline\`.\n`,
       );
+    }
+  }
+
+  // Codex integration
+  if (opts.codex) {
+    if (!codexAvailable()) {
+      process.stdout.write(
+        "• Codex not found on PATH — install it first: https://developers.openai.com/codex/quickstart\n" +
+          "  Then re-run `pingpal init --codex`.\n",
+      );
+    } else {
+      // MCP server
+      const mcpResult = registerCodexMcp(mcpBin());
+      if (mcpResult.ok) {
+        process.stdout.write(`✓ registered MCP server 'pingpal' in ~/.codex/config.toml\n`);
+      } else {
+        process.stdout.write(`• Codex MCP registration: ${mcpResult.output}\n`);
+      }
+
+      // Hook
+      const hookResult = await installCodexHook();
+      if (hookResult.ok) {
+        const verb = hookResult.detail === "already installed" ? "already wired" : "installed";
+        process.stdout.write(`✓ ${verb} Codex UserPromptSubmit hook → ${hookResult.path}\n`);
+      } else {
+        process.stdout.write(
+          `• couldn't install Codex hook: ${hookResult.detail}\n`,
+        );
+      }
     }
   }
 
