@@ -7,3 +7,4 @@ dist/
 coverage/
 .env
 _handoff_outbox/
+.npmrc
