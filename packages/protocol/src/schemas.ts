@@ -1,5 +1,10 @@
 import { z } from "zod";
-import { MAX_PING_CHARS } from "./constants.js";
+import {
+  BLOB_TTL_MS,
+  FILE_CHUNK_BYTES,
+  MAX_FILE_BYTES,
+  MAX_PING_CHARS,
+} from "./constants.js";
 
 /**
  * A handle is a teammate's display name, unique within a room. Kept to a
@@ -193,6 +198,74 @@ export const errorSchema = z.object({
   message: z.string().min(1),
 });
 
+// ---------------------------------------------------------------------------
+// File sharing — chunked upload/download over the relay WebSocket
+// ---------------------------------------------------------------------------
+
+/** A blob identifier minted by the uploader (opaque to the relay). */
+const blobIdSchema = z.string().min(8).max(64);
+
+/** MIME type, optionally provided with a file upload. */
+const mimeSchema = z.string().min(1).max(128).optional();
+
+/**
+ * A file_share ping travels through the relay to room members (like a ping,
+ * the relay routes it without interpreting the payload). It carries enough
+ * metadata that recipients can auto-download or decide to skip.
+ */
+export const fileShareSchema = z.object({
+  type: z.literal("file_share"),
+  id: z.string().min(1),
+  from: z.string().min(1),
+  to: z.string().min(1).nullable(),
+  blobId: blobIdSchema,
+  name: z.string().min(1).max(256),
+  size: z.number().int().positive().max(MAX_FILE_BYTES),
+  mime: mimeSchema,
+  ts: z.number().int().nonnegative(),
+});
+
+/**
+ * client → relay (upload) OR relay → client (download):
+ * announces a file transfer about to begin.
+ */
+export const fileBeginSchema = z.object({
+  type: z.literal("file_begin"),
+  blobId: blobIdSchema,
+  name: z.string().min(1).max(256),
+  size: z.number().int().positive().max(MAX_FILE_BYTES),
+  mime: mimeSchema,
+  totalChunks: z.number().int().positive().max(1024),
+});
+
+/**
+ * client ↔ relay: a single base64-encoded chunk of file data.
+ * Each chunk carries up to {@link FILE_CHUNK_BYTES} raw bytes (≈85 KB base64).
+ */
+export const fileChunkSchema = z.object({
+  type: z.literal("file_chunk"),
+  blobId: blobIdSchema,
+  index: z.number().int().nonnegative().max(1023),
+  data: z
+    .string()
+    .min(1)
+    .max(FILE_CHUNK_BYTES * 2), // generous headroom for base64 expansion
+});
+
+/** client → relay OR relay → client: signals the end of a file transfer. */
+export const fileEndSchema = z.object({
+  type: z.literal("file_end"),
+  blobId: blobIdSchema,
+  ok: z.boolean(),
+  error: z.string().optional(),
+});
+
+/** client → relay: request to download a blob by id. */
+export const fileDownloadSchema = z.object({
+  type: z.literal("file_download"),
+  blobId: blobIdSchema,
+});
+
 /**
  * The discriminated union of every wire message. Use this to parse any line
  * coming off the relay socket or the local IPC socket.
@@ -207,6 +280,11 @@ export const envelopeSchema = z.discriminatedUnion("type", [
   roomCreatedSchema,
   resolveCodeSchema,
   codeResolvedSchema,
+  fileShareSchema,
+  fileBeginSchema,
+  fileChunkSchema,
+  fileEndSchema,
+  fileDownloadSchema,
 ]);
 
 /** True iff a `hello` carries exactly one room key (roomId XOR legacy roomCode). */

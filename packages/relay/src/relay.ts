@@ -10,6 +10,11 @@ import {
   type CodeResolved,
   type CreateRoom,
   type Envelope,
+  type FileBegin,
+  type FileChunk,
+  type FileDownload,
+  type FileEnd,
+  type FileShare,
   type Ping,
   type Presence,
   type ProtocolError,
@@ -26,6 +31,7 @@ import {
 import { RateLimiter, type Conn } from "./connection.js";
 import { RoomRegistry } from "./rooms.js";
 import { RoomDirectory } from "./directory.js";
+import { BlobStore } from "./blobstore.js";
 
 /** Options for {@link startRelay}. All have sensible defaults. */
 export interface RelayOptions {
@@ -111,6 +117,20 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
   const registry = new RoomRegistry();
   const directory = new RoomDirectory();
   const conns = new Set<Conn>();
+  const blobs = new BlobStore();
+
+  // Track in-progress uploads: blobId → { chunks: Map<index, Buffer>, name, size, mime, roomKey, conn }
+  const uploads = new Map<
+    string,
+    {
+      chunks: Map<number, Buffer>;
+      name: string;
+      size: number;
+      mime?: string;
+      roomKey: string;
+      conn: Conn;
+    }
+  >();
 
   return new Promise((resolve, reject) => {
     const wss = new WebSocketServer({ port: opts.port ?? DEFAULT_PORT, host: opts.host });
@@ -188,6 +208,167 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
       send(conn.ws, reply);
     };
 
+    // --- File sharing handlers ---
+
+    const onFileBegin = (conn: Conn, env: FileBegin): void => {
+      if (!conn.roomCode) {
+        sendError(conn.ws, "not_joined", "join a room before uploading files");
+        return;
+      }
+      if (uploads.has(env.blobId)) {
+        sendError(conn.ws, "duplicate", "a transfer with this blobId is already in progress");
+        return;
+      }
+      uploads.set(env.blobId, {
+        chunks: new Map(),
+        name: env.name,
+        size: env.size,
+        mime: env.mime,
+        roomKey: conn.roomCode,
+        conn,
+      });
+    };
+
+    const onFileChunk = (conn: Conn, env: FileChunk): void => {
+      const up = uploads.get(env.blobId);
+      if (!up) {
+        sendError(conn.ws, "unknown_blob", "no upload in progress with this blobId");
+        return;
+      }
+      if (up.conn !== conn) {
+        sendError(conn.ws, "forbidden", "only the uploader may send chunks");
+        return;
+      }
+      const buf = Buffer.from(env.data, "base64");
+      up.chunks.set(env.index, buf);
+    };
+
+    const onFileEnd = (conn: Conn, env: FileEnd): void => {
+      const up = uploads.get(env.blobId);
+      if (!up) {
+        sendError(conn.ws, "unknown_blob", "no upload in progress with this blobId");
+        return;
+      }
+      if (up.conn !== conn) {
+        sendError(conn.ws, "forbidden", "only the uploader may finalise");
+        return;
+      }
+      uploads.delete(env.blobId);
+
+      if (!env.ok) {
+        // Client signalling failure — nothing to store.
+        return;
+      }
+
+      // Assemble chunks in order.
+      const ordered: Buffer[] = [];
+      for (let i = 0; i < up.chunks.size; i++) {
+        const c = up.chunks.get(i);
+        if (!c) {
+          sendError(conn.ws, "incomplete", `missing chunk ${i}`);
+          return;
+        }
+        ordered.push(c);
+      }
+      const data = Buffer.concat(ordered);
+      if (data.byteLength !== up.size) {
+        sendError(
+          conn.ws,
+          "size_mismatch",
+          `declared ${up.size}, got ${data.byteLength}`,
+        );
+        return;
+      }
+
+      const stored = blobs.store(env.blobId, data, up.name, up.roomKey, up.mime);
+      if (!stored) {
+        sendError(conn.ws, "storage_full", "relay blob store is full or file too large");
+        return;
+      }
+
+      // Confirm to uploader.
+      const ok: FileEnd = { type: "file_end", blobId: env.blobId, ok: true };
+      send(conn.ws, ok);
+    };
+
+    const onFileShare = (conn: Conn, env: FileShare): void => {
+      if (!conn.roomCode || !conn.handle) {
+        sendError(conn.ws, "not_joined", "join a room before sharing files");
+        return;
+      }
+      // Verify the blob exists.
+      if (!blobs.get(env.blobId)) {
+        sendError(conn.ws, "unknown_blob", "blob not found — upload first");
+        return;
+      }
+      const room = registry.room(conn.roomCode);
+      const out: FileShare = { ...env, from: conn.handle };
+      const frame = encodeFrame(out);
+      if (room) {
+        if (out.to === null) {
+          for (const c of room) {
+            if (c.handle !== conn.handle && c.ws.readyState === c.ws.OPEN) c.ws.send(frame);
+          }
+        } else {
+          for (const c of room) {
+            if (c.handle === out.to && c.ws.readyState === c.ws.OPEN) c.ws.send(frame);
+          }
+        }
+      }
+    };
+
+    const onFileDownload = (conn: Conn, env: FileDownload): void => {
+      if (!conn.roomCode) {
+        sendError(conn.ws, "not_joined", "join a room before downloading");
+        return;
+      }
+      const blob = blobs.get(env.blobId);
+      if (!blob) {
+        sendError(conn.ws, "unknown_blob", "blob not found or expired");
+        return;
+      }
+      // Scope check: only room members can download.
+      // (The roomCode may differ from the blob's roomKey if someone joined via
+      // a legacy code or direct roomId; relax the check to same relay group.)
+      if (blob.roomKey !== conn.roomCode) {
+        sendError(conn.ws, "forbidden", "blob belongs to a different room");
+        return;
+      }
+
+      // Send file_begin
+      const totalChunks = Math.ceil(blob.size / 65536);
+      const begin: FileBegin = {
+        type: "file_begin",
+        blobId: env.blobId,
+        name: blob.name,
+        size: blob.size,
+        mime: blob.mime,
+        totalChunks,
+      };
+      send(conn.ws, begin);
+
+      // Send chunks
+      const CHUNK = 65536;
+      for (let i = 0; i < totalChunks; i++) {
+        const chunk = blob.data.subarray(i * CHUNK, (i + 1) * CHUNK);
+        const chunkMsg: FileChunk = {
+          type: "file_chunk",
+          blobId: env.blobId,
+          index: i,
+          data: chunk.toString("base64"),
+        };
+        send(conn.ws, chunkMsg);
+      }
+
+      // Send file_end
+      const end: FileEnd = {
+        type: "file_end",
+        blobId: env.blobId,
+        ok: true,
+      };
+      send(conn.ws, end);
+    };
+
     const onPing = (conn: Conn, env: Ping, now: number): void => {
       if (!conn.roomCode || !conn.handle) {
         sendError(conn.ws, "not_joined", "send a 'hello' frame before pinging");
@@ -240,6 +421,21 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
           return;
         case "resolve_code":
           onResolveCode(conn, env);
+          return;
+        case "file_begin":
+          onFileBegin(conn, env);
+          return;
+        case "file_chunk":
+          onFileChunk(conn, env);
+          return;
+        case "file_end":
+          onFileEnd(conn, env);
+          return;
+        case "file_share":
+          onFileShare(conn, env);
+          return;
+        case "file_download":
+          onFileDownload(conn, env);
           return;
         default:
           sendError(
@@ -315,6 +511,7 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
 
     const close = (): Promise<void> => {
       clearInterval(timer);
+      blobs.dispose();
       return new Promise<void>((res) => {
         for (const conn of [...conns]) {
           try {

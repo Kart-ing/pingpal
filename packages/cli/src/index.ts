@@ -23,6 +23,8 @@ import { chatCommand } from "./commands/chat.js";
 import { launchCommand } from "./commands/launch.js";
 import { inviteCommand } from "./commands/invite.js";
 import { leaveCommand } from "./commands/leave.js";
+import { shareCommand } from "./commands/share.js";
+import { filesCommand } from "./commands/files.js";
 
 const paths = resolvePaths();
 
@@ -130,6 +132,16 @@ program
   .action((opts: { short?: boolean }) => run(() => inviteCommand(paths, opts)));
 
 program
+  .command("share")
+  .description("share a file with the room (≤5 MB via relay, larger via git)")
+  .argument("<file>", "path to the file to share")
+  .option("--to <handle>", "send to a specific teammate (omit to broadcast)")
+  .option("--git", "force git-backed sharing even for small files")
+  .action((file: string, opts: { to?: string; git?: boolean }) =>
+    run(() => shareCommand(paths, file, opts)),
+  );
+
+program
   .command("pings")
   .description("show unread pings as ASCII faces and mark them read")
   .option("--no-read", "peek without marking pings as read")
@@ -149,6 +161,11 @@ program
   .command("statusline")
   .description("print a one-line live who's-online roster (for a Claude Code statusLine)")
   .action(() => run(() => statuslineCommand(paths)));
+
+program
+  .command("files")
+  .description("list received files (saved by the daemon from file-share pings)")
+  .action(() => run(() => filesCommand(paths)));
 
 program
   .command("chat")

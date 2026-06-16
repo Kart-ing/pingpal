@@ -21,6 +21,10 @@ export interface PingPalPaths {
   readonly unread: string;
   /** Append-only NDJSON log of received pings (so the hook can read directly). */
   readonly pings: string;
+  /** Directory where received files are saved. */
+  readonly files: string;
+  /** JSON file tracking received file metadata. */
+  readonly filesLog: string;
 }
 
 /**
@@ -39,5 +43,7 @@ export function resolvePaths(home?: string): PingPalPaths {
     pid: join(base, "daemon.pid"),
     unread: join(base, "unread"),
     pings: join(base, "pings.ndjson"),
+    files: join(base, "files"),
+    filesLog: join(base, "files.json"),
   };
 }

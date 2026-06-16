@@ -80,12 +80,28 @@ export const statusRequestSchema = baseRequest.extend({
   method: z.literal("status"),
 });
 
+export const sendFileRequestSchema = baseRequest.extend({
+  method: z.literal("sendFile"),
+  params: z.object({
+    /** Absolute or relative path to the file on disk. */
+    path: z.string().min(1),
+    /** Optional target handle (like sendPing). Omit to broadcast. */
+    to: z.string().nullish(),
+  }),
+});
+
+export const listFilesRequestSchema = baseRequest.extend({
+  method: z.literal("listFiles"),
+});
+
 /** Every request the daemon understands. */
 export const ipcRequestSchema = z.discriminatedUnion("method", [
   getPresenceRequestSchema,
   getPingsRequestSchema,
   sendPingRequestSchema,
   statusRequestSchema,
+  sendFileRequestSchema,
+  listFilesRequestSchema,
 ]);
 export type IpcRequest = z.infer<typeof ipcRequestSchema>;
 export type IpcMethod = IpcRequest["method"];
@@ -99,6 +115,21 @@ export interface IpcResults {
   getPresence: { peers: MergedPeer[] };
   getPings: { pings: BufferedPing[] };
   sendPing: { id: string; via: Reachability | "none"; delivered: boolean };
+  sendFile: {
+    blobId: string;
+    name: string;
+    size: number;
+    via: "relay";
+    delivered: boolean;
+  };
+  listFiles: Array<{
+    blobId: string;
+    name: string;
+    size: number;
+    from: string;
+    savedAt: number;
+    path: string;
+  }>;
   status: {
     handle: string;
     roomCode: string;

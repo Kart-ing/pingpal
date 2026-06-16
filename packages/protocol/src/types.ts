@@ -5,6 +5,11 @@ import type {
   createRoomSchema,
   envelopeSchema,
   errorSchema,
+  fileBeginSchema,
+  fileChunkSchema,
+  fileDownloadSchema,
+  fileEndSchema,
+  fileShareSchema,
   helloSchema,
   peerSchema,
   pingSchema,
@@ -46,6 +51,21 @@ export type ResolveCode = z.infer<typeof resolveCodeSchema>;
 
 /** relay → client: result of a code lookup (`roomId: null` ⇒ not found). */
 export type CodeResolved = z.infer<typeof codeResolvedSchema>;
+
+/** A file-share announcement routed through the relay to room members. */
+export type FileShare = z.infer<typeof fileShareSchema>;
+
+/** Announce a file transfer (sent by uploader to relay, or relay to downloader). */
+export type FileBegin = z.infer<typeof fileBeginSchema>;
+
+/** A single base64-encoded chunk of file data. */
+export type FileChunk = z.infer<typeof fileChunkSchema>;
+
+/** Signals end of a file transfer (success or failure). */
+export type FileEnd = z.infer<typeof fileEndSchema>;
+
+/** Request to download a blob from the relay. */
+export type FileDownload = z.infer<typeof fileDownloadSchema>;
 
 /** Any wire message. */
 export type Envelope = z.infer<typeof envelopeSchema>;

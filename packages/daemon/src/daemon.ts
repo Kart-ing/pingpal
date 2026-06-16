@@ -1,4 +1,6 @@
 import { mkdir } from "node:fs/promises";
+import { writeFile, readFile } from "node:fs/promises";
+import { basename, join as pathJoin } from "node:path";
 import { spawn } from "node:child_process";
 import {
   newId,
@@ -7,6 +9,7 @@ import {
   deriveRoomKey,
   seal,
   open as openSealed,
+  type FileShare,
   type Ping,
 } from "@pingpal/protocol";
 import type { ResolvedConfig } from "./config.js";
@@ -66,6 +69,9 @@ export class Daemon {
   private readonly discoveryFactory: DiscoveryFactory | null;
   private started = false;
 
+  /** Received file metadata (loaded from disk on start). */
+  private fileMeta: IpcResults["listFiles"] = [];
+
   constructor(
     private readonly config: ResolvedConfig,
     private readonly paths: PingPalPaths,
@@ -94,6 +100,15 @@ export class Daemon {
     this.started = true;
 
     await mkdir(this.paths.home, { recursive: true });
+    await mkdir(this.paths.files, { recursive: true });
+
+    // Load received-file metadata from disk.
+    try {
+      const raw = await readFile(this.paths.filesLog, "utf8");
+      this.fileMeta = JSON.parse(raw);
+    } catch {
+      this.fileMeta = [];
+    }
 
     // 1. LAN subsystem (mesh listener + mDNS) — only if enabled in config.
     if (this.config.lanDiscovery) {
@@ -104,6 +119,7 @@ export class Daemon {
     this.relay = this.relayFactory(this.config, {
       onPresence: (peers) => this.presence.setRelayPeers(peers),
       onPing: (ping) => this.onInboundPing(ping, "relay"),
+      onFileShare: (fs) => this.onInboundFileShare(fs),
       onConnected: () => {},
       onDisconnected: () => this.presence.clearRelayPeers(),
     });
@@ -191,6 +207,48 @@ export class Daemon {
         this.spawnNotify(this.config.notifyCommand);
       } catch {
         /* best-effort: a broken notify command must not crash the daemon */
+      }
+    }
+  }
+
+  /** Auto-download a file when a file_share announcement arrives. */
+  private async onInboundFileShare(fs: FileShare): Promise<void> {
+    if (!this.relay) return;
+    try {
+      const buf = await this.relay.downloadFile(fs.blobId, 30000);
+      const senderDir = pathJoin(this.paths.files, fs.from);
+      await mkdir(senderDir, { recursive: true });
+      const filePath = pathJoin(senderDir, fs.name);
+      await writeFile(filePath, buf);
+
+      const record: IpcResults["listFiles"][number] = {
+        blobId: fs.blobId,
+        name: fs.name,
+        size: fs.size,
+        from: fs.from,
+        savedAt: Date.now(),
+        path: filePath,
+      };
+      this.fileMeta.push(record);
+      await writeFile(this.paths.filesLog, JSON.stringify(this.fileMeta, null, 2), "utf8");
+
+      // Notify about the new file (reuse notifyCommand if configured).
+      if (this.config.notifyCommand) {
+        try {
+          this.spawnNotify(this.config.notifyCommand);
+        } catch {
+          /* best-effort */
+        }
+      }
+    } catch (err) {
+      // Download failed — file may have expired or relay was unreachable.
+      // Don't crash the daemon; the user can retry with `pingpal pull`.
+      if (this.config.notifyCommand) {
+        try {
+          this.spawnNotify(this.config.notifyCommand);
+        } catch {
+          /* best-effort */
+        }
       }
     }
   }
@@ -312,6 +370,53 @@ export class Daemon {
   }
 
   // -------------------------------------------------------------------------
+  // File sharing
+  // -------------------------------------------------------------------------
+
+  /**
+   * Share a file with the room via the relay blob store.
+   * For files ≤5 MB the relay hosts it (30 min TTL). For larger files the caller
+   * should use git-backed sharing (handled by the CLI).
+   */
+  async sendFile(
+    filePath: string,
+    rawTo: string | null | undefined,
+  ): Promise<IpcResults["sendFile"]> {
+    if (!this.relay?.connected) {
+      throw new DeliveryError("no_relay", "relay is not connected");
+    }
+
+    const buf = await readFile(filePath);
+    if (buf.byteLength > 5_242_880) {
+      throw new DeliveryError(
+        "file_too_large",
+        "files over 5 MB must be shared via git — run `pingpal share --git <file>`",
+      );
+    }
+
+    const name = basename(filePath);
+    const blobId = newId("blob");
+    const to = rawTo?.trim().replace(/^@/, "") || null;
+
+    await this.relay.uploadFile(blobId, filePath, name);
+
+    // Announce the file to the room.
+    const fs: FileShare = {
+      type: "file_share",
+      id: newId("fshare"),
+      from: this.config.handle,
+      to,
+      blobId,
+      name,
+      size: buf.byteLength,
+      ts: this.now(),
+    };
+    this.relay.sendFileShare(fs);
+
+    return { blobId, name, size: buf.byteLength, via: "relay", delivered: true };
+  }
+
+  // -------------------------------------------------------------------------
   // IPC
   // -------------------------------------------------------------------------
 
@@ -342,6 +447,12 @@ export class Daemon {
       }
       case "sendPing":
         return this.sendPing(req.params.to, req.params.text);
+      case "sendFile":
+        return this.sendFile(req.params.path, req.params.to);
+      case "listFiles": {
+        const result: IpcResults["listFiles"] = this.fileMeta;
+        return result;
+      }
       case "status": {
         const result: IpcResults["status"] = {
           handle: this.config.handle,
