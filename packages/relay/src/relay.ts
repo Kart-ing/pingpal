@@ -2,13 +2,19 @@ import { WebSocketServer, type WebSocket } from "ws";
 import {
   encodeFrame,
   envelopeSchema,
+  helloHasOneRoom,
+  helloRoomKey,
   MAX_PING_CHARS,
   newId,
   type Ack,
+  type CodeResolved,
+  type CreateRoom,
   type Envelope,
   type Ping,
   type Presence,
   type ProtocolError,
+  type ResolveCode,
+  type RoomCreated,
 } from "@pingpal/protocol";
 import {
   DEFAULT_PORT,
@@ -19,6 +25,7 @@ import {
 } from "./constants.js";
 import { RateLimiter, type Conn } from "./connection.js";
 import { RoomRegistry } from "./rooms.js";
+import { RoomDirectory } from "./directory.js";
 
 /** Options for {@link startRelay}. All have sensible defaults. */
 export interface RelayOptions {
@@ -102,6 +109,7 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
   const rateRefillPerSec = opts.rateRefillPerSec ?? RATE_REFILL_PER_SEC;
 
   const registry = new RoomRegistry();
+  const directory = new RoomDirectory();
   const conns = new Set<Conn>();
 
   return new Promise((resolve, reject) => {
@@ -141,12 +149,43 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
         sendError(conn.ws, "already_joined", "this connection has already joined a room");
         return;
       }
-      conn.roomCode = env.roomCode;
+      // A hello must carry exactly one room key: the new roomId, or (legacy) a
+      // self-chosen roomCode. Either becomes the opaque grouping key.
+      if (!helloHasOneRoom(env)) {
+        sendError(conn.ws, "bad_frame", "hello must carry exactly one of roomId / roomCode");
+        return;
+      }
+      const roomKey = helloRoomKey(env);
+      if (!roomKey) {
+        sendError(conn.ws, "bad_frame", "hello is missing a room");
+        return;
+      }
+      conn.roomCode = roomKey;
       conn.handle = env.handle;
       conn.faceId = env.faceId;
       conn.lastActivity = now;
       registry.join(conn);
-      broadcastPresence(env.roomCode);
+      broadcastPresence(roomKey);
+    };
+
+    const onCreateRoom = (conn: Conn, env: CreateRoom): void => {
+      // Minting a room needs no prior join — it's the very first step of
+      // `start-room`. We simply hand back a fresh code + roomId; the client then
+      // sends a normal `hello` with that roomId to actually enter.
+      const { code, roomId } = directory.create();
+      const reply: RoomCreated = { type: "room_created", nonce: env.nonce, roomId, code };
+      send(conn.ws, reply);
+    };
+
+    const onResolveCode = (conn: Conn, env: ResolveCode): void => {
+      const roomId = directory.resolve(env.code);
+      const reply: CodeResolved = {
+        type: "code_resolved",
+        nonce: env.nonce,
+        code: env.code,
+        roomId,
+      };
+      send(conn.ws, reply);
     };
 
     const onPing = (conn: Conn, env: Ping, now: number): void => {
@@ -196,6 +235,12 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
         case "ping":
           onPing(conn, env, now);
           return;
+        case "create_room":
+          onCreateRoom(conn, env);
+          return;
+        case "resolve_code":
+          onResolveCode(conn, env);
+          return;
         default:
           sendError(
             conn.ws,
@@ -233,6 +278,10 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
         const code = conn.roomCode;
         if (code) {
           registry.leave(conn);
+          // If that was the last member, the room is gone — forget its join code
+          // too, so a minted code is single-meeting (it stops resolving once the
+          // room empties). Legacy roomCode rooms aren't in the directory: no-op.
+          if (!registry.room(code)) directory.forget(code);
           broadcastPresence(code);
         }
       });

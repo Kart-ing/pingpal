@@ -35,11 +35,16 @@ npm install -g pingpal
 
 ```bash
 pingpal init                 # pick a handle + face; wires up Claude Code (hook + MCP + status line)
-pingpal join our-room-7f3a   # join a room (the code is the shared secret)
-pingpal start                # launch the background daemon
+pingpal start-room           # create a room — prints a short code like  vmw-qkzt-ph
+#   🎉  Room created!  Share this code — teammates run:
+#         pingpal join vmw-qkzt-ph
 ```
 
-That's it. From now on:
+That mints a **fresh room with a fresh join code every time** (Google-Meet style):
+the daemon is already running and you're hosting. To join someone else's room
+instead, skip `start-room` and run `pingpal join <their-code>`.
+
+From now on:
 
 - **Incoming pings** pop into your Claude Code session as a face + bubble (and
   show on your next prompt).
@@ -52,23 +57,22 @@ That's it. From now on:
 ## Bring a friend — 2 minutes
 
 PingPal ships with a **default public relay**, so there's nothing to host — you
-and your friend just need to share a room code.
+and your friend just need to share a join code.
 
-**You (host):** create an invite and send the line it prints.
+**You (host):** create a room and share the code.
 
 ```bash
-pingpal invite
-#   room code:  our-room-7f3a
-#   relay:      wss://pingpal-relay-production.up.railway.app   (the default)
-#     npx pingpal join our-room-7f3a --handle <your-handle>
+pingpal start-room
+#   🎉  Room created!  Share this code — teammates run:
+#         pingpal join xak-tg4f-rq
 ```
 
-**Your friend:** install, then join. A short wizard asks for their handle + face,
-then connects them.
+**Your friend:** install, then join by your code. A short wizard asks for their
+handle + face, then connects them.
 
 ```bash
 npm install -g pingpal
-pingpal join our-room-7f3a
+pingpal join xak-tg4f-rq
 #   👋  Welcome to PingPal — let's get you into the room.
 #   connected. `pingpal status` to see who's around, `pingpal chat` to talk.
 ```
@@ -82,8 +86,9 @@ mDNS, no relay at all)? See [Self-hosting the relay](#self-hosting-the-relay).
 
 ## Inviting teammates
 
-A room is just a shared, unguessable **room code** plus a **relay** everyone can
-reach. To bring someone in, generate an invite:
+A room is created with `start-room`, which mints a **fresh, ephemeral join code
+every time** (like `xak-tg4f-rq`). To bring someone in, share that code — or
+print a formal invite:
 
 ```bash
 pingpal invite
@@ -91,20 +96,20 @@ pingpal invite
 
 ```
   📨  PingPal invite
-  room code:  our-team-hunter2
+  join code:  xak-tg4f-rq
   relay:      wss://relay.example.com
   Send a teammate this — they run it, pick a handle + face, and they're in:
 
-    npx pingpal join our-team-hunter2 --relay wss://relay.example.com --handle <your-handle>
+    npx pingpal join xak-tg4f-rq --relay wss://relay.example.com --handle <your-handle>
 ```
 
-`pingpal invite` is the **only** place the room code is shown in full (everywhere
+`pingpal invite` is the **only** place the join code is shown in full (everywhere
 else masks it — sharing the secret is a deliberate act). Send that line to your
 teammate. When they run it, PingPal walks them through a short guided first-run —
 pick a handle, choose a face — then connects them and starts their daemon:
 
 ```bash
-npx pingpal join our-team-hunter2 --relay wss://relay.example.com
+npx pingpal join xak-tg4f-rq --relay wss://relay.example.com
 #   👋  Welcome to PingPal — let's get you into the room.
 #   Your handle: ▸ sarah
 #   Pick a face: ▸ ( =◕ᆽ◕= ) cat
@@ -130,11 +135,12 @@ That's the whole sign-up: one command, two prompts, in.
 
 | Command | What it does |
 | --- | --- |
-| `pingpal init` | Prompt for handle / room / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. |
-| `pingpal join <room>` | Join a room from an invite (guided first-run: prompts for handle + face), or **switch rooms**. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
-| `pingpal leave` | Leave the current room — stops the daemon and clears the room from config (keeps your handle + face). Rejoin with `pingpal join <room>`. |
-| `pingpal invite` | Print a shareable invite — room code + relay + a copy-paste `join` command. The one place the room code is shown in full. `--short` for just the command. |
-| `pingpal start` | Start the background daemon (`pingpald`) if it isn't already up. |
+| `pingpal init` | Prompt for handle / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. Room is optional — use `--room` only for scripted/legacy setups. |
+| `pingpal start-room` | Create a new room (Meet-style): mints a fresh, ephemeral join code (e.g. `vmw-qkzt-ph`), starts the daemon, and prints the command teammates use to join. `--relay` to specify which relay hosts the room. |
+| `pingpal join <code>` | Join a room by its short code (guided first-run: prompts for handle + face), or **switch rooms**. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
+| `pingpal leave` | Leave the current room — stops the daemon and clears the room from config (keeps your handle + face). Rejoin with `pingpal join <code>`. |
+| `pingpal invite` | Print a shareable invite — join code + relay + a copy-paste `join` command. The one place the code is shown in full. `--short` for just the command. |
+| `pingpal start` | Start the background daemon (`pingpald`) if it isn't already up. (Not needed after `start-room`/`join` — they auto-start the daemon.) |
 | `pingpal stop` | Stop the daemon. |
 | `pingpal status` | Show daemon + relay + LAN status and a who's-online roster. |
 | `pingpal pings` | Show unread pings as ASCII faces and mark them read. `--announce` / `--quiet-when-empty` make it a clean unit for `/loop`. |
@@ -144,7 +150,7 @@ That's the whole sign-up: one command, two prompts, in.
 | `pingpal whoami` | Print your current handle, room, and face. |
 
 `pingpal init` takes flags to skip the prompts:
-`--handle <h> --room <code> --face <id>` (and `--no-hook` / `--no-mcp` to skip
+`--handle <h> --face <id>` (and `--no-hook` / `--no-mcp` to skip
 either Claude Code integration). Run `pingpal --help` for everything.
 
 ---

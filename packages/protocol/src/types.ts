@@ -1,12 +1,16 @@
 import type { z } from "zod";
 import type {
   ackSchema,
+  codeResolvedSchema,
+  createRoomSchema,
   envelopeSchema,
   errorSchema,
   helloSchema,
   peerSchema,
   pingSchema,
   presenceSchema,
+  resolveCodeSchema,
+  roomCreatedSchema,
   statusSchema,
 } from "./schemas.js";
 
@@ -30,6 +34,18 @@ export type Ack = z.infer<typeof ackSchema>;
 
 /** A structured protocol error. */
 export type ProtocolError = z.infer<typeof errorSchema>;
+
+/** client → relay: mint a fresh ephemeral room. */
+export type CreateRoom = z.infer<typeof createRoomSchema>;
+
+/** relay → client: a freshly minted room (roomId + short code). */
+export type RoomCreated = z.infer<typeof roomCreatedSchema>;
+
+/** client → relay: resolve a short join code to its roomId. */
+export type ResolveCode = z.infer<typeof resolveCodeSchema>;
+
+/** relay → client: result of a code lookup (`roomId: null` ⇒ not found). */
+export type CodeResolved = z.infer<typeof codeResolvedSchema>;
 
 /** Any wire message. */
 export type Envelope = z.infer<typeof envelopeSchema>;

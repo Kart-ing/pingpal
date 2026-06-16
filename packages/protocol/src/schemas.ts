@@ -26,6 +26,30 @@ export const roomCodeSchema = z
   .min(4, "room code must be at least 4 characters")
   .max(128, "room code must be at most 128 characters");
 
+/**
+ * A full-entropy room identifier (see {@link import("./code.js").newRoomId}):
+ * the real shared secret, the relay's routing label, and the E2E key material.
+ * Distinct from the short human {@link joinCodeSchema}. Validated as an opaque
+ * token of reasonable length — the relay never interprets it.
+ */
+export const roomIdSchema = z
+  .string()
+  .trim()
+  .min(8, "roomId must be at least 8 characters")
+  .max(128, "roomId must be at most 128 characters");
+
+/**
+ * A short, human-typed join code (Meet-style, e.g. `vmw-qkzt-ph`). Only used to
+ * look a room up on the relay; never key material. We accept dashes/spacing and
+ * a generous length so normalisation (lowercasing, stripping separators) can
+ * happen client-side before lookup.
+ */
+export const joinCodeSchema = z
+  .string()
+  .trim()
+  .min(3, "join code is too short")
+  .max(40, "join code is too long");
+
 /** Identifier of an ASCII face preset (or a custom override). */
 export const faceIdSchema = z
   .string()
@@ -50,13 +74,61 @@ export const pingTextSchema = z
 // Envelope members. Every message carries a `type` discriminant.
 // ---------------------------------------------------------------------------
 
-/** client → relay: join a room under a handle. */
+/**
+ * client → relay: join a room under a handle.
+ *
+ * Rooms are addressed by {@link roomIdSchema} (`roomId`) — the full-entropy
+ * secret minted by `create_room`. `roomCode` is retained as an optional legacy
+ * field so pre-Meet clients (which sent a self-chosen room code) still connect;
+ * the relay treats whichever is present as the opaque room key, preferring
+ * `roomId`. Exactly one of the two must be set.
+ */
 export const helloSchema = z.object({
   type: z.literal("hello"),
-  roomCode: roomCodeSchema,
+  roomId: roomIdSchema.optional(),
+  roomCode: roomCodeSchema.optional(),
   handle: handleSchema,
   faceId: faceIdSchema,
   clientVersion: z.string().min(1),
+});
+
+/**
+ * client → relay: mint a brand-new ephemeral room. The relay generates a fresh
+ * `roomId` and a short human join `code`, registers the mapping, and replies
+ * with {@link roomCreatedSchema}. No room state persists beyond the first
+ * member connecting — the code is forgotten once the room empties.
+ */
+export const createRoomSchema = z.object({
+  type: z.literal("create_room"),
+  /** Correlates the reply, so a client can have one in flight unambiguously. */
+  nonce: z.string().min(1).max(64),
+});
+
+/** relay → client: a freshly minted room. */
+export const roomCreatedSchema = z.object({
+  type: z.literal("room_created"),
+  nonce: z.string().min(1).max(64),
+  roomId: roomIdSchema,
+  code: joinCodeSchema,
+});
+
+/**
+ * client → relay: resolve a short join code to its `roomId` (the join path).
+ * The relay looks up the code it minted; a miss yields a {@link codeResolvedSchema}
+ * with `roomId: null` so the CLI can print a friendly "no such room" message.
+ */
+export const resolveCodeSchema = z.object({
+  type: z.literal("resolve_code"),
+  nonce: z.string().min(1).max(64),
+  code: joinCodeSchema,
+});
+
+/** relay → client: the result of a code lookup (`roomId: null` ⇒ not found). */
+export const codeResolvedSchema = z.object({
+  type: z.literal("code_resolved"),
+  nonce: z.string().min(1).max(64),
+  code: joinCodeSchema,
+  roomId: roomIdSchema.nullable(),
 });
 
 /** One peer as seen in a presence roster. */
@@ -131,4 +203,18 @@ export const envelopeSchema = z.discriminatedUnion("type", [
   pingSchema,
   ackSchema,
   errorSchema,
+  createRoomSchema,
+  roomCreatedSchema,
+  resolveCodeSchema,
+  codeResolvedSchema,
 ]);
+
+/** True iff a `hello` carries exactly one room key (roomId XOR legacy roomCode). */
+export function helloHasOneRoom(h: { roomId?: unknown; roomCode?: unknown }): boolean {
+  return (h.roomId != null) !== (h.roomCode != null);
+}
+
+/** The opaque room key the relay routes by: prefer roomId, fall back to legacy code. */
+export function helloRoomKey(h: { roomId?: string; roomCode?: string }): string | undefined {
+  return h.roomId ?? h.roomCode;
+}

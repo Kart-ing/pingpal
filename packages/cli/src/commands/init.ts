@@ -46,10 +46,16 @@ function hookScriptPath(): string {
   return fileURLToPath(new URL("../../hook/pingpal-hook.mjs", import.meta.url));
 }
 
-/** Resolve handle/room/face from flags, prompting interactively for any gaps. */
+/**
+ * Resolve handle/face (and an OPTIONAL legacy room) from flags, prompting
+ * interactively for gaps. In the Meet-style model a room comes from
+ * `start-room`/`join`, so `init` no longer demands one — it sets up your
+ * identity + Claude Code wiring. `--room` is still honoured for scripted/legacy
+ * setups (it seeds a raw room code).
+ */
 async function gatherIdentity(opts: InitOptions): Promise<{
   handle: string;
-  roomCode: string;
+  roomCode?: string;
   faceId?: string;
 }> {
   const interactive = isInteractive();
@@ -60,11 +66,8 @@ async function gatherIdentity(opts: InitOptions): Promise<{
     handle = await promptValidated("Your handle", handleSchema);
   }
 
-  let roomCode = opts.room ? roomCodeSchema.parse(opts.room) : undefined;
-  if (!roomCode) {
-    if (!interactive) throw new Error("missing --room (non-interactive)");
-    roomCode = await promptValidated("Room code (shared secret)", roomCodeSchema);
-  }
+  // Room is optional now; only validate one if explicitly provided via flag.
+  const roomCode = opts.room ? roomCodeSchema.parse(opts.room) : undefined;
 
   let faceId = opts.face ? faceIdSchema.parse(opts.face) : undefined;
   if (faceId && !FACE_IDS.includes(faceId)) {
@@ -124,7 +127,9 @@ export async function initCommand(
 ): Promise<number> {
   const { handle, roomCode, faceId } = await gatherIdentity(opts);
 
-  await updateConfig(paths, { handle, roomCode, faceId });
+  // Only persist a room when one was explicitly provided (legacy/scripted).
+  // Otherwise leave the room unset — `start-room`/`join` set it later.
+  await updateConfig(paths, { handle, faceId, ...(roomCode ? { roomCode } : {}) });
 
   process.stdout.write(
     `\n${facePreview(faceId, handle)}  saved config for @${handle} → ${paths.config}\n`,
@@ -176,12 +181,20 @@ export async function initCommand(
     }
   }
 
+  const next = roomCode
+    ? [
+        "  pingpal start     # launch the background daemon",
+        "  pingpal status    # see who's online",
+      ]
+    : [
+        "  pingpal start-room       # create a room and get a code to share",
+        "  pingpal join <code>      # or join a teammate's room by their code",
+      ];
   process.stdout.write(
     [
       "",
       "You're set. Next:",
-      "  pingpal start     # launch the background daemon",
-      "  pingpal status    # see who's online",
+      ...next,
       "  …then start coding — pings surface inside Claude Code.",
       "",
     ].join("\n"),

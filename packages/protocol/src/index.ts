@@ -10,21 +10,32 @@ export { MAX_PING_CHARS, PROTOCOL_VERSION } from "./constants.js";
 
 export {
   ackSchema,
+  codeResolvedSchema,
+  createRoomSchema,
   envelopeSchema,
   errorSchema,
   faceIdSchema,
   handleSchema,
   helloSchema,
+  helloHasOneRoom,
+  helloRoomKey,
+  joinCodeSchema,
   peerSchema,
   pingSchema,
+  pingHasMessage,
   pingTextSchema,
   presenceSchema,
+  resolveCodeSchema,
   roomCodeSchema,
+  roomCreatedSchema,
+  roomIdSchema,
   statusSchema,
 } from "./schemas.js";
 
 export type {
   Ack,
+  CodeResolved,
+  CreateRoom,
   Envelope,
   EnvelopeType,
   Hello,
@@ -32,6 +43,8 @@ export type {
   Ping,
   Presence,
   ProtocolError,
+  ResolveCode,
+  RoomCreated,
   Status,
 } from "./types.js";
 
@@ -46,5 +59,13 @@ export {
 } from "./framing.js";
 
 export { newId } from "./id.js";
+
+export {
+  genCode,
+  newRoomId,
+  normalizeCode,
+  CODE_ALPHABET,
+  CODE_LENGTH,
+} from "./code.js";
 
 export { deriveRoomKey, seal, open, looksSealed } from "./crypto.js";

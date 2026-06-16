@@ -97,7 +97,10 @@ export class WsRelayClient implements RelayTransport {
   ) {
     this.hello = {
       type: "hello",
-      roomCode: config.roomCode,
+      // Address the room by its full-entropy roomId (the relay groups by it and
+      // never sees our display code). For legacy rooms `roomId` was promoted from
+      // the old roomCode in resolveConfig, so the wire key is unchanged.
+      roomId: config.roomId,
       handle: config.handle,
       faceId: config.faceId,
       clientVersion: config.clientVersion,

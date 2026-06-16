@@ -14,6 +14,7 @@ import { resolvePaths } from "@pingpal/daemon";
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 import { initCommand, type InitOptions } from "./commands/init.js";
 import { joinCommand } from "./commands/join.js";
+import { startRoomCommand } from "./commands/start-room.js";
 import { startDaemon, statusDaemon, stopDaemon } from "./commands/daemon-control.js";
 import { whoamiCommand } from "./commands/whoami.js";
 import { pingsCommand } from "./commands/pings.js";
@@ -76,14 +77,25 @@ program
   );
 
 program
+  .command("start-room")
+  .description("create a new room (Meet-style): mint a fresh join code and host it")
+  .option("--handle <handle>", "set/override your handle")
+  .option("--relay <url>", "relay to create the room on (ws:// or wss://)")
+  .option("--face <id>", "a preset face id (skips the face prompt)")
+  .action((opts: { handle?: string; relay?: string; face?: string }) =>
+    run(() => startRoomCommand(paths, opts)),
+  );
+
+program
   .command("join")
-  .description("join a room from an invite (guided first-run), or switch rooms")
-  .argument("<room>", "the room code to join")
+  .description("join a room by its short code (guided first-run), or switch rooms")
+  .argument("<code>", "the join code (e.g. vmw-qkzt-ph), or a legacy room code with --legacy")
   .option("--handle <handle>", "set/override your handle while joining")
   .option("--relay <url>", "relay URL from an invite (ws:// or wss://)")
   .option("--face <id>", "a preset face id (skips the face prompt)")
-  .action((room: string, opts: { handle?: string; relay?: string; face?: string }) =>
-    run(() => joinCommand(paths, room, opts)),
+  .option("--legacy", "treat the argument as a raw legacy room code (pre-Meet rooms)")
+  .action((code: string, opts: { handle?: string; relay?: string; face?: string; legacy?: boolean }) =>
+    run(() => joinCommand(paths, code, opts)),
   );
 
 program

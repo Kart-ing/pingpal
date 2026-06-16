@@ -6,7 +6,10 @@ import type { Peer, Ping } from "@pingpal/protocol";
 
 const configFor = (port: number): ResolvedConfig => ({
   handle: "alice",
-  roomCode: "room-secret-1234",
+  // The client now addresses the room by roomId on the wire; displayCode is the
+  // human label and irrelevant to relay routing.
+  roomId: "rm_roomsecret1234roomsecret1234ab",
+  displayCode: "room-secret-1234",
   faceId: "fox",
   relayUrl: `ws://127.0.0.1:${port}`,
   lanDiscovery: false,

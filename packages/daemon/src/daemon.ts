@@ -72,7 +72,9 @@ export class Daemon {
     deps: DaemonDeps = {},
   ) {
     this.now = deps.now ?? (() => Date.now());
-    this.roomKey = deriveRoomKey(config.roomCode);
+    // Derive the E2E key from the room SECRET (roomId). Legacy rooms promoted
+    // their old roomCode into roomId, so existing rooms keep the same key.
+    this.roomKey = deriveRoomKey(config.roomId);
     this.presence = new PresenceStore(config.handle);
     this.buffer = new PingBuffer(paths);
     this.ipc = new IpcServer(paths, (req) => this.handleIpc(req));
@@ -134,7 +136,9 @@ export class Daemon {
           nodeId: this.nodeId,
           handle: this.config.handle,
           faceId: this.config.faceId,
-          room: this.config.roomCode,
+          // Group LAN peers by the room SECRET, matching the relay's grouping
+          // (and keeping the human code out of mDNS broadcasts).
+          room: this.config.roomId,
           port,
         },
         {
@@ -341,7 +345,8 @@ export class Daemon {
       case "status": {
         const result: IpcResults["status"] = {
           handle: this.config.handle,
-          roomCode: this.config.roomCode,
+          // Report the short, human-recognisable code (not the secret roomId).
+          roomCode: this.config.displayCode,
           relayUrl: this.config.relayUrl,
           relayConnected: this.relayConnected,
           lanEnabled: this.discovery?.enabled ?? false,
