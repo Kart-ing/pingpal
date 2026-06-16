@@ -28,15 +28,22 @@ export async function leaveCommand(paths: PingPalPaths): Promise<number> {
     return 0;
   }
 
-  const wasIn = typeof cfg.roomCode === "string" ? cfg.roomCode : null;
+  const wasIn =
+    typeof cfg.roomCode === "string"
+      ? cfg.roomCode
+      : typeof cfg.roomId === "string"
+        ? cfg.roomId
+        : null;
+  // Clear every room-identifying field so a later `start` can't silently rejoin.
+  delete cfg.roomId;
   delete cfg.roomCode;
   delete cfg.password;
   await writeFile(paths.config, JSON.stringify(cfg, null, 2) + "\n", "utf8");
 
   if (wasIn) {
     process.stdout.write(
-      `pingpal: left room ${wasIn.slice(0, 4)}…  ` +
-        `(rejoin with \`pingpal join <room>\`)\n`,
+      `pingpal: left the room  ` +
+        `(\`pingpal start-room\` to host a new one, or \`pingpal join <code>\`)\n`,
     );
   } else {
     process.stdout.write("pingpal: not in a room.\n");

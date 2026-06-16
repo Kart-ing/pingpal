@@ -14,6 +14,7 @@ import { resolvePaths } from "@pingpal/daemon";
 const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 import { initCommand, type InitOptions } from "./commands/init.js";
 import { joinCommand } from "./commands/join.js";
+import { startRoomCommand } from "./commands/start-room.js";
 import { startDaemon, statusDaemon, stopDaemon } from "./commands/daemon-control.js";
 import { whoamiCommand } from "./commands/whoami.js";
 import { pingsCommand } from "./commands/pings.js";
@@ -22,6 +23,8 @@ import { chatCommand } from "./commands/chat.js";
 import { launchCommand } from "./commands/launch.js";
 import { inviteCommand } from "./commands/invite.js";
 import { leaveCommand } from "./commands/leave.js";
+import { shareCommand } from "./commands/share.js";
+import { filesCommand } from "./commands/files.js";
 
 const paths = resolvePaths();
 
@@ -52,6 +55,7 @@ program
   .option("--no-mcp", "skip registering the MCP server")
   .option("--no-statusline", "skip wiring the live who's-online status line")
   .option("--force", "overwrite an existing status line / Kickbacks chain slot")
+  .option("--codex", "also wire up Codex (MCP server + UserPromptSubmit hook)")
   .action(
     (opts: {
       handle?: string;
@@ -61,6 +65,7 @@ program
       mcp: boolean;
       statusline: boolean;
       force?: boolean;
+      codex?: boolean;
     }) => {
       const init: InitOptions = {
         handle: opts.handle,
@@ -70,20 +75,32 @@ program
         noMcp: opts.mcp === false,
         noStatusline: opts.statusline === false,
         force: opts.force,
+        codex: opts.codex,
       };
       return run(() => initCommand(paths, init));
     },
   );
 
 program
+  .command("start-room")
+  .description("create a new room (Meet-style): mint a fresh join code and host it")
+  .option("--handle <handle>", "set/override your handle")
+  .option("--relay <url>", "relay to create the room on (ws:// or wss://)")
+  .option("--face <id>", "a preset face id (skips the face prompt)")
+  .action((opts: { handle?: string; relay?: string; face?: string }) =>
+    run(() => startRoomCommand(paths, opts)),
+  );
+
+program
   .command("join")
-  .description("join a room from an invite (guided first-run), or switch rooms")
-  .argument("<room>", "the room code to join")
+  .description("join a room by its short code (guided first-run), or switch rooms")
+  .argument("<code>", "the join code (e.g. vmw-qkzt-ph), or a legacy room code with --legacy")
   .option("--handle <handle>", "set/override your handle while joining")
   .option("--relay <url>", "relay URL from an invite (ws:// or wss://)")
   .option("--face <id>", "a preset face id (skips the face prompt)")
-  .action((room: string, opts: { handle?: string; relay?: string; face?: string }) =>
-    run(() => joinCommand(paths, room, opts)),
+  .option("--legacy", "treat the argument as a raw legacy room code (pre-Meet rooms)")
+  .action((code: string, opts: { handle?: string; relay?: string; face?: string; legacy?: boolean }) =>
+    run(() => joinCommand(paths, code, opts)),
   );
 
 program
@@ -118,6 +135,16 @@ program
   .action((opts: { short?: boolean }) => run(() => inviteCommand(paths, opts)));
 
 program
+  .command("share")
+  .description("share a file with the room (≤5 MB via relay, larger via git)")
+  .argument("<file>", "path to the file to share")
+  .option("--to <handle>", "send to a specific teammate (omit to broadcast)")
+  .option("--git", "force git-backed sharing even for small files")
+  .action((file: string, opts: { to?: string; git?: boolean }) =>
+    run(() => shareCommand(paths, file, opts)),
+  );
+
+program
   .command("pings")
   .description("show unread pings as ASCII faces and mark them read")
   .option("--no-read", "peek without marking pings as read")
@@ -137,6 +164,11 @@ program
   .command("statusline")
   .description("print a one-line live who's-online roster (for a Claude Code statusLine)")
   .action(() => run(() => statuslineCommand(paths)));
+
+program
+  .command("files")
+  .description("list received files (saved by the daemon from file-share pings)")
+  .action(() => run(() => filesCommand(paths)));
 
 program
   .command("chat")

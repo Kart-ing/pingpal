@@ -90,7 +90,7 @@ async function runForeground(paths: PingPalPaths): Promise<void> {
 
   const where = addr.socketPath ?? `127.0.0.1:${addr.port}`;
   console.log(
-    `pingpald: up as @${config.handle} in room (${config.roomCode.slice(0, 4)}…), ` +
+    `pingpald: up as @${config.handle} in room (${config.displayCode.slice(0, 4)}…), ` +
       `relay ${config.relayUrl}, IPC ${where}`,
   );
 

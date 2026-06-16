@@ -196,4 +196,90 @@ describe("@pingpal/relay integration", () => {
     const after = await alice.waitType("presence", (p) => p.peers.length === 1);
     expect(after.peers[0]?.handle).toBe("alice");
   });
+
+  // ---------------------------------------------------------------------------
+  // Meet-style room control plane: create_room → resolve_code → join by roomId.
+  // ---------------------------------------------------------------------------
+
+  it("mints a room (create_room → room_created) and resolves its code", async () => {
+    relay = await startRelay({ port: 0 });
+    const host = await TestClient.connect(relay.port);
+
+    host.send({ type: "create_room", nonce: "n1" });
+    const created = await host.waitType("room_created", (e) => e.nonce === "n1");
+    expect(created.code).toMatch(/^[a-z0-9]{3}-[a-z0-9]{4}-[a-z0-9]{2}$/);
+    expect(created.roomId).toMatch(/^rm_/);
+
+    // A second client resolves the shared code back to the same roomId.
+    const joiner = await TestClient.connect(relay.port);
+    joiner.send({ type: "resolve_code", nonce: "n2", code: created.code });
+    const resolved = await joiner.waitType("code_resolved", (e) => e.nonce === "n2");
+    expect(resolved.roomId).toBe(created.roomId);
+  });
+
+  it("lets two clients meet by roomId after a code handshake", async () => {
+    relay = await startRelay({ port: 0 });
+    const host = await TestClient.connect(relay.port);
+    host.send({ type: "create_room", nonce: "c" });
+    const { roomId, code } = await host.waitType("room_created", (e) => e.nonce === "c");
+
+    const joiner = await TestClient.connect(relay.port);
+    joiner.send({ type: "resolve_code", nonce: "r", code });
+    const { roomId: joinerRoomId } = await joiner.waitType("code_resolved");
+
+    // Both enter by roomId (the field the daemon actually sends).
+    host.send({ type: "hello", roomId, handle: "host", faceId: "fox", clientVersion: "test" });
+    joiner.send({ type: "hello", roomId: joinerRoomId!, handle: "guest", faceId: "owl", clientVersion: "test" });
+
+    const roster = await host.waitType("presence", (p) => p.peers.length === 2);
+    expect(roster.peers.map((p) => p.handle).sort()).toEqual(["guest", "host"]);
+  });
+
+  it("returns roomId:null for an unknown code", async () => {
+    relay = await startRelay({ port: 0 });
+    const c = await TestClient.connect(relay.port);
+    c.send({ type: "resolve_code", nonce: "x", code: "zzz-zzzz-zz" });
+    const resolved = await c.waitType("code_resolved", (e) => e.nonce === "x");
+    expect(resolved.roomId).toBeNull();
+  });
+
+  it("forgets a code once the room empties (single-meeting codes)", async () => {
+    relay = await startRelay({ port: 0 });
+    const host = await TestClient.connect(relay.port);
+    host.send({ type: "create_room", nonce: "c" });
+    const { roomId, code } = await host.waitType("room_created", (e) => e.nonce === "c");
+
+    host.send({ type: "hello", roomId, handle: "host", faceId: "fox", clientVersion: "test" });
+    await host.waitType("presence", (p) => p.peers.length === 1);
+
+    // Host leaves → room empties → code should stop resolving.
+    host.close();
+    // Give the relay a tick to process the close before we probe.
+    await new Promise((r) => setTimeout(r, 100));
+
+    const probe = await TestClient.connect(relay.port);
+    probe.send({ type: "resolve_code", nonce: "p", code });
+    const resolved = await probe.waitType("code_resolved", (e) => e.nonce === "p");
+    expect(resolved.roomId).toBeNull();
+    probe.close();
+  });
+
+  it("rejects a hello that carries both roomId and roomCode", async () => {
+    relay = await startRelay({ port: 0 });
+    const c = await TestClient.connect(relay.port);
+    // Bypass client-side validation to exercise the relay's own guard.
+    c.sendRaw(
+      JSON.stringify({
+        type: "hello",
+        roomId: "rm_deadbeefdeadbeefdeadbeefdeadbeef",
+        roomCode: "legacy-1234",
+        handle: "x",
+        faceId: "fox",
+        clientVersion: "test",
+      }) + "\n",
+    );
+    const err = await c.waitType("error", (e) => e.code === "bad_frame");
+    expect(err.message).toMatch(/exactly one/);
+    c.close();
+  });
 });

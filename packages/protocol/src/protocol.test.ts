@@ -49,7 +49,7 @@ const validError: Envelope = { type: "error", code: "BAD_ROOM", message: "no suc
 describe("constants", () => {
   it("locks the ping cap at 90", () => {
     expect(MAX_PING_CHARS).toBe(90);
-    expect(PROTOCOL_VERSION).toBe(1);
+    expect(PROTOCOL_VERSION).toBe(2);
   });
 });
 

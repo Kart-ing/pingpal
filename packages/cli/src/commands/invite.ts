@@ -31,6 +31,12 @@ export async function inviteCommand(
     process.stderr.write("pingpal: not configured yet — run `pingpal init` first.\n");
     return 1;
   }
+  if (!config.roomCode) {
+    process.stderr.write(
+      "pingpal: not in a room — `pingpal join <room>` first, then invite people to it.\n",
+    );
+    return 1;
+  }
   // Resolve the relay exactly as the daemon would (env override > config > default).
   const relay = resolveConfig(config).relayUrl;
   const room = config.roomCode;

@@ -2,10 +2,16 @@ import WebSocket from "ws";
 import {
   createFrameDecoder,
   encodeFrame,
+  FILE_CHUNK_BYTES,
+  type FileBegin,
+  type FileChunk,
+  type FileEnd,
+  type FileShare,
   type Hello,
   type Peer,
   type Ping,
 } from "@pingpal/protocol";
+import { readFile } from "node:fs/promises";
 import type { ResolvedConfig } from "./config.js";
 
 /**
@@ -17,6 +23,8 @@ export interface RelayCallbacks {
   onPresence(peers: Peer[]): void;
   /** A ping was routed to us by the relay. */
   onPing(ping: Ping): void;
+  /** A file-share announcement arrived from a room member. */
+  onFileShare(fs: FileShare): void;
   /** The link came up and the `hello` was sent. */
   onConnected(): void;
   /** The link went down (will auto-reconnect unless stopped). */
@@ -35,6 +43,24 @@ export interface RelayTransport {
   stop(): Promise<void>;
   /** Send a ping to the relay. Returns false if not currently connected. */
   sendPing(ping: Ping): boolean;
+  /** Send a file-share announcement through the relay. */
+  sendFileShare(fs: FileShare): boolean;
+  /**
+   * Upload a file to the relay blob store. Reads the file from disk, chunks it,
+   * and streams it over the WebSocket. Resolves with the blobId on success,
+   * rejects on failure.
+   */
+  uploadFile(
+    blobId: string,
+    filePath: string,
+    name: string,
+    mime?: string,
+  ): Promise<void>;
+  /**
+   * Download a file from the relay blob store. Resolves with the assembled Buffer,
+   * rejects on failure or timeout.
+   */
+  downloadFile(blobId: string, timeoutMs?: number): Promise<Buffer>;
   /** True while a socket is open and the `hello` has been sent. */
   readonly connected: boolean;
 }
@@ -83,6 +109,17 @@ export class WsRelayClient implements RelayTransport {
   private alive = true;
   private stopped = false;
   private _connected = false;
+  /** Pending downloads awaiting chunks from the relay: blobId → {resolve, reject, chunks, expectedChunks} */
+  private readonly downloads = new Map<
+    string,
+    {
+      resolve: (buf: Buffer) => void;
+      reject: (err: Error) => void;
+      chunks: Map<number, Buffer>;
+      totalChunks: number;
+      timer: ReturnType<typeof setTimeout>;
+    }
+  >();
 
   private readonly hello: Hello;
   private readonly backoffBaseMs: number;
@@ -97,7 +134,10 @@ export class WsRelayClient implements RelayTransport {
   ) {
     this.hello = {
       type: "hello",
-      roomCode: config.roomCode,
+      // Address the room by its full-entropy roomId (the relay groups by it and
+      // never sees our display code). For legacy rooms `roomId` was promoted from
+      // the old roomCode in resolveConfig, so the wire key is unchanged.
+      roomId: config.roomId,
       handle: config.handle,
       faceId: config.faceId,
       clientVersion: config.clientVersion,
@@ -155,6 +195,10 @@ export class WsRelayClient implements RelayTransport {
       for (const env of envelopes) {
         if (env.type === "presence") this.callbacks.onPresence(env.peers);
         else if (env.type === "ping") this.callbacks.onPing(env);
+        else if (env.type === "file_share") this.callbacks.onFileShare(env);
+        else if (env.type === "file_begin") this.onDownloadBegin(env);
+        else if (env.type === "file_chunk") this.onDownloadChunk(env);
+        else if (env.type === "file_end") this.onDownloadEnd(env);
         // ack/error: nothing actionable in v1.
       }
     });
@@ -171,6 +215,12 @@ export class WsRelayClient implements RelayTransport {
     this.stopHeartbeat();
     this.ws?.removeAllListeners();
     this.ws = null;
+    // Reject any pending downloads — the link is gone.
+    for (const [id, dl] of this.downloads) {
+      clearTimeout(dl.timer);
+      dl.reject(new Error("relay disconnected"));
+      this.downloads.delete(id);
+    }
     if (wasConnected) this.callbacks.onDisconnected();
     if (!this.stopped) this.scheduleReconnect();
   }
@@ -222,6 +272,126 @@ export class WsRelayClient implements RelayTransport {
     const ws = this.ws;
     if (!ws || ws.readyState !== ws.OPEN) return false;
     return this.safeSend(encodeFrame(ping));
+  }
+
+  sendFileShare(fs: FileShare): boolean {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== ws.OPEN) return false;
+    return this.safeSend(encodeFrame(fs));
+  }
+
+  async uploadFile(
+    blobId: string,
+    filePath: string,
+    name: string,
+    mime?: string,
+  ): Promise<void> {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== ws.OPEN)
+      throw new Error("relay is not connected");
+
+    const buf = await readFile(filePath);
+    const totalChunks = Math.ceil(buf.byteLength / FILE_CHUNK_BYTES);
+
+    // file_begin
+    const begin: FileBegin = {
+      type: "file_begin",
+      blobId,
+      name,
+      size: buf.byteLength,
+      mime,
+      totalChunks,
+    };
+    this.safeSendOrThrow(ws, encodeFrame(begin));
+
+    // Chunks
+    for (let i = 0; i < totalChunks; i++) {
+      const chunk = buf.subarray(i * FILE_CHUNK_BYTES, (i + 1) * FILE_CHUNK_BYTES);
+      const data = chunk.toString("base64");
+      const msg: FileChunk = { type: "file_chunk", blobId, index: i, data };
+      this.safeSendOrThrow(ws, encodeFrame(msg));
+    }
+
+    // file_end — wait for relay ack
+    const end: FileEnd = { type: "file_end", blobId, ok: true };
+    this.safeSendOrThrow(ws, encodeFrame(end));
+  }
+
+  downloadFile(blobId: string, timeoutMs = 30000): Promise<Buffer> {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== ws.OPEN)
+      return Promise.reject(new Error("relay is not connected"));
+
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        this.downloads.delete(blobId);
+        reject(new Error("download timed out"));
+      }, timeoutMs);
+
+      this.downloads.set(blobId, {
+        resolve,
+        reject,
+        chunks: new Map(),
+        totalChunks: -1,
+        timer,
+      });
+
+      const req = { type: "file_download" as const, blobId };
+      try {
+        this.safeSendOrThrow(ws, encodeFrame(req));
+      } catch (err) {
+        clearTimeout(timer);
+        this.downloads.delete(blobId);
+        reject(err);
+      }
+    });
+  }
+
+  private onDownloadBegin(env: FileBegin): void {
+    const dl = this.downloads.get(env.blobId);
+    if (!dl) return;
+    dl.totalChunks = env.totalChunks;
+  }
+
+  private onDownloadChunk(env: FileChunk): void {
+    const dl = this.downloads.get(env.blobId);
+    if (!dl) return;
+    dl.chunks.set(env.index, Buffer.from(env.data, "base64"));
+  }
+
+  private onDownloadEnd(env: FileEnd): void {
+    const dl = this.downloads.get(env.blobId);
+    if (!dl) return;
+    this.downloads.delete(env.blobId);
+    clearTimeout(dl.timer);
+
+    if (!env.ok) {
+      dl.reject(new Error(env.error ?? "transfer failed"));
+      return;
+    }
+
+    // Assemble chunks in order
+    const ordered: Buffer[] = [];
+    for (let i = 0; i < dl.totalChunks; i++) {
+      const c = dl.chunks.get(i);
+      if (!c) {
+        dl.reject(new Error(`missing chunk ${i}`));
+        return;
+      }
+      ordered.push(c);
+    }
+    dl.resolve(Buffer.concat(ordered));
+  }
+
+  private safeSendOrThrow(ws: WebSocket, frame: string): void {
+    if (ws.readyState !== ws.OPEN) throw new Error("relay connection lost");
+    try {
+      ws.send(frame);
+    } catch (err) {
+      throw new Error(
+        `relay send failed: ${err instanceof Error ? err.message : String(err)}`,
+      );
+    }
   }
 
   private safeSend(frame: string): boolean {

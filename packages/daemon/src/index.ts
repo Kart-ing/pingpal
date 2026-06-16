@@ -57,6 +57,9 @@ export type { IpcAddress, IpcHandler } from "./ipc-server.js";
 
 export { IpcClientError, sendRequest } from "./ipc-client.js";
 
+export { mintRoom, resolveCode, RoomControlError } from "./room-control.js";
+export type { MintedRoom, RoomControlOptions } from "./room-control.js";
+
 export {
   createLineSplitter,
   encodeIpc,
