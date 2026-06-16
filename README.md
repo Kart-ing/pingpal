@@ -238,6 +238,13 @@ Both the hook command and the MCP server are registered by **absolute path** to
 the bundled Node entry points, so they keep working after a global install where
 dependency bins aren't on your `PATH`.
 
+> **Also works with OpenCode!** PingPal ships an [OpenCode plugin](/docs/plugins)
+> that registers the same tools (`pingpal_send`, `pingpal_inbox`,
+> `pingpal_roster`, `pingpal_chat`, `pingpal_setup`) directly inside OpenCode
+> sessions. Place `pingpal.ts` in `~/.config/opencode/plugins/` and OpenCode
+> auto-loads it — no MCP server needed on that side. Pings also surface as
+> system notifications when your session goes idle.
+
 ---
 
 ## LAN auto-discovery
