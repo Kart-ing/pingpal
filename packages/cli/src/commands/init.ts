@@ -26,6 +26,8 @@ export interface InitOptions {
   handle?: string;
   room?: string;
   face?: string;
+  /** Optional room password (protects the room from code-guessing + encrypts). */
+  password?: string;
   /** Skip the Claude Code hook install. */
   noHook?: boolean;
   /** Skip the Claude Code MCP registration. */
@@ -124,7 +126,12 @@ export async function initCommand(
 ): Promise<number> {
   const { handle, roomCode, faceId } = await gatherIdentity(opts);
 
-  await updateConfig(paths, { handle, roomCode, faceId });
+  await updateConfig(paths, {
+    handle,
+    roomCode,
+    faceId,
+    ...(opts.password ? { password: opts.password } : {}),
+  });
 
   process.stdout.write(
     `\n${facePreview(faceId, handle)}  saved config for @${handle} → ${paths.config}\n`,

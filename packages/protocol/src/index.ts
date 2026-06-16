@@ -47,4 +47,4 @@ export {
 
 export { newId } from "./id.js";
 
-export { deriveRoomKey, seal, open, looksSealed } from "./crypto.js";
+export { deriveRoomKey, roomAuthProof, seal, open, looksSealed } from "./crypto.js";

@@ -32,12 +32,15 @@ export async function inviteCommand(
     return 1;
   }
   // Resolve the relay exactly as the daemon would (env override > config > default).
-  const relay = resolveConfig(config).relayUrl;
+  const resolved = resolveConfig(config);
+  const relay = resolved.relayUrl;
   const room = config.roomCode;
+  const hasPassword = !!resolved.password;
   const isLocal = LOCAL_RE.test(relay);
   const isPlaceholder = relay === DEFAULT_RELAY_URL;
 
-  const joinCmd = `npx pingpal join ${room} --relay ${relay} --handle <your-handle>`;
+  const pwFlag = hasPassword ? " --password <password>" : "";
+  const joinCmd = `npx pingpal join ${room} --relay ${relay} --handle <your-handle>${pwFlag}`;
 
   if (opts.short) {
     process.stdout.write(joinCmd + "\n");
@@ -50,15 +53,25 @@ export async function inviteCommand(
     "  ────────────────────────────────────────",
     `  room code:  ${room}`,
     `  relay:      ${relay}`,
+    `  password:   ${hasPassword ? "yes — share it SEPARATELY (not in this line)" : "none (open room)"}`,
     "",
     "  Send a teammate this — they run it, pick a handle + face, and they're in:",
     "",
     `    ${joinCmd}`,
     "",
     "  (or, if they already ran `pingpal init`:)",
-    `    pingpal join ${room} --relay ${relay}`,
+    `    pingpal join ${room} --relay ${relay}${pwFlag}`,
     "",
   ];
+  if (hasPassword) {
+    out.push(
+      "  🔒 This room is password-protected: the relay rejects wrong/missing",
+      "     passwords (so the code can't be guessed into), and the password also",
+      "     strengthens the end-to-end encryption. Share it over a SEPARATE",
+      "     channel — never paste it in the same message as the room code.",
+      "",
+    );
+  }
 
   if (isLocal) {
     out.push(

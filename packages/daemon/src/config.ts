@@ -29,6 +29,13 @@ export const configFileSchema = z.object({
   notifyCommand: z.string().min(1).optional(),
   /** Set false to run relay-only and skip mDNS LAN discovery entirely. */
   lanDiscovery: z.boolean().optional(),
+  /**
+   * Optional room password. Folds into the E2E key (so it protects message
+   * content) AND produces the relay auth proof (so wrong/missing passwords are
+   * rejected at join — stopping room-code brute-forcing). `PINGPAL_PASSWORD`
+   * env overrides this if you'd rather not store it on disk.
+   */
+  password: z.string().min(1).optional(),
 });
 
 export type ConfigFile = z.infer<typeof configFileSchema>;
@@ -42,6 +49,8 @@ export interface ResolvedConfig {
   readonly notifyCommand?: string;
   readonly lanDiscovery: boolean;
   readonly clientVersion: string;
+  /** Room password (raw), or undefined for an open room. */
+  readonly password?: string;
 }
 
 /** Version reported to the relay in the `hello` frame. */
@@ -61,6 +70,8 @@ export function resolveConfig(
     (env.PINGPAL_RELAY && env.PINGPAL_RELAY.trim()) ||
     file.relayUrl ||
     DEFAULT_RELAY_URL;
+  const password =
+    (env.PINGPAL_PASSWORD && env.PINGPAL_PASSWORD.trim()) || file.password || undefined;
   return {
     handle: file.handle,
     roomCode: file.roomCode,
@@ -69,6 +80,7 @@ export function resolveConfig(
     notifyCommand: file.notifyCommand,
     lanDiscovery: file.lanDiscovery ?? true,
     clientVersion: CLIENT_VERSION,
+    password,
   };
 }
 

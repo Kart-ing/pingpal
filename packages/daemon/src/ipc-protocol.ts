@@ -108,6 +108,8 @@ export interface IpcResults {
     lanPeerCount: number;
     relayPeerCount: number;
     unread: number;
+    /** Set when the relay rejected our join (e.g. wrong room password). */
+    authError?: string | null;
   };
 }
 

@@ -21,6 +21,7 @@ import { statuslineCommand } from "./commands/statusline.js";
 import { chatCommand } from "./commands/chat.js";
 import { launchCommand } from "./commands/launch.js";
 import { inviteCommand } from "./commands/invite.js";
+import { leaveCommand } from "./commands/leave.js";
 
 const paths = resolvePaths();
 
@@ -46,6 +47,7 @@ program
   .description("set your handle/room/face and wire up Claude Code (hook + MCP + status line)")
   .option("--handle <handle>", "your handle (unique within the room)")
   .option("--room <code>", "the shared room code (acts as the secret)")
+  .option("--password <pw>", "optional room password (blocks code-guessing; strengthens encryption)")
   .option("--face <id>", "a preset face id (or a custom one)")
   .option("--no-hook", "skip installing the Claude Code notification hook")
   .option("--no-mcp", "skip registering the MCP server")
@@ -55,6 +57,7 @@ program
     (opts: {
       handle?: string;
       room?: string;
+      password?: string;
       face?: string;
       hook: boolean;
       mcp: boolean;
@@ -64,6 +67,7 @@ program
       const init: InitOptions = {
         handle: opts.handle,
         room: opts.room,
+        password: opts.password,
         face: opts.face,
         noHook: opts.hook === false,
         noMcp: opts.mcp === false,
@@ -80,10 +84,17 @@ program
   .argument("<room>", "the room code to join")
   .option("--handle <handle>", "set/override your handle while joining")
   .option("--relay <url>", "relay URL from an invite (ws:// or wss://)")
+  .option("--password <pw>", "room password, if the room has one")
   .option("--face <id>", "a preset face id (skips the face prompt)")
-  .action((room: string, opts: { handle?: string; relay?: string; face?: string }) =>
-    run(() => joinCommand(paths, room, opts)),
+  .action(
+    (room: string, opts: { handle?: string; relay?: string; password?: string; face?: string }) =>
+      run(() => joinCommand(paths, room, opts)),
   );
+
+program
+  .command("leave")
+  .description("leave the current room (stops the daemon, clears the room from config)")
+  .action(() => run(() => leaveCommand(paths)));
 
 program
   .command("start")

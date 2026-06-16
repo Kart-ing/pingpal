@@ -58,6 +58,8 @@ export class Daemon {
   private readonly spawnNotify: (command: string) => void;
   /** E2E key derived from the room code; messages are sealed/opened with it. */
   private readonly roomKey: Buffer;
+  /** Set when the relay rejected our join (e.g. wrong room password); else null. */
+  private authError: string | null = null;
 
   private relay: RelayTransport | null = null;
   private lanMesh: LanMesh | null = null;
@@ -72,7 +74,7 @@ export class Daemon {
     deps: DaemonDeps = {},
   ) {
     this.now = deps.now ?? (() => Date.now());
-    this.roomKey = deriveRoomKey(config.roomCode);
+    this.roomKey = deriveRoomKey(config.roomCode, config.password);
     this.presence = new PresenceStore(config.handle);
     this.buffer = new PingBuffer(paths);
     this.ipc = new IpcServer(paths, (req) => this.handleIpc(req));
@@ -100,10 +102,18 @@ export class Daemon {
 
     // 2. Relay link.
     this.relay = this.relayFactory(this.config, {
-      onPresence: (peers) => this.presence.setRelayPeers(peers),
+      onPresence: (peers) => {
+        this.authError = null; // a roster means we were admitted → password OK
+        this.presence.setRelayPeers(peers);
+      },
       onPing: (ping) => this.onInboundPing(ping, "relay"),
       onConnected: () => {},
       onDisconnected: () => this.presence.clearRelayPeers(),
+      onRelayError: (code, message) => {
+        // Surface auth failures so `pingpal status` can tell the user the
+        // password was wrong, instead of silently never joining.
+        if (code === "auth_failed") this.authError = message;
+      },
     });
     this.relay.start();
 
@@ -348,6 +358,7 @@ export class Daemon {
           lanPeerCount: this.presence.lanCount(),
           relayPeerCount: this.presence.relayCount(),
           unread: this.buffer.unreadCount(),
+          authError: this.authError,
         };
         return result;
       }

@@ -2,6 +2,7 @@ import WebSocket from "ws";
 import {
   createFrameDecoder,
   encodeFrame,
+  roomAuthProof,
   type Hello,
   type Peer,
   type Ping,
@@ -21,6 +22,8 @@ export interface RelayCallbacks {
   onConnected(): void;
   /** The link went down (will auto-reconnect unless stopped). */
   onDisconnected(): void;
+  /** The relay sent an error envelope (e.g. `auth_failed` for a wrong password). */
+  onRelayError?(code: string, message: string): void;
 }
 
 /**
@@ -101,6 +104,11 @@ export class WsRelayClient implements RelayTransport {
       handle: config.handle,
       faceId: config.faceId,
       clientVersion: config.clientVersion,
+      // Proof of the room password (if any), so the relay admits us. Omitted for
+      // open rooms. Never sends the raw password — only the scrypt proof.
+      ...(roomAuthProof(config.roomCode, config.password)
+        ? { roomAuth: roomAuthProof(config.roomCode, config.password)! }
+        : {}),
     };
     this.backoffBaseMs = opts.backoffBaseMs ?? DEFAULT_BACKOFF_BASE_MS;
     this.backoffMaxMs = opts.backoffMaxMs ?? DEFAULT_BACKOFF_MAX_MS;
@@ -155,6 +163,8 @@ export class WsRelayClient implements RelayTransport {
       for (const env of envelopes) {
         if (env.type === "presence") this.callbacks.onPresence(env.peers);
         else if (env.type === "ping") this.callbacks.onPing(env);
+        else if (env.type === "error")
+          this.callbacks.onRelayError?.(env.code, env.message);
         // ack/error: nothing actionable in v1.
       }
     });

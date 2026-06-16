@@ -57,6 +57,13 @@ export const helloSchema = z.object({
   handle: handleSchema,
   faceId: faceIdSchema,
   clientVersion: z.string().min(1),
+  /**
+   * Proof the client knows the room password (a scrypt hash from
+   * `roomAuthProof`), or omitted for an open (passwordless) room. The relay
+   * compares proofs to gate entry — the first joiner sets the room's expected
+   * proof, later joiners must match — without ever seeing the raw password.
+   */
+  roomAuth: z.string().min(1).optional(),
 });
 
 /** One peer as seen in a presence roster. */

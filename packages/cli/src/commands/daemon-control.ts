@@ -61,15 +61,21 @@ export async function statusDaemon(paths: PingPalPaths): Promise<number> {
 
   const relay = status.relayConnected ? "connected" : "offline";
   const lan = status.lanEnabled ? `on, ${status.lanPeerCount} peer(s)` : "off";
-  process.stdout.write(
-    [
-      `pingpal: @${status.handle} is up`,
-      `  relay:  ${status.relayUrl} (${relay})`,
-      `  LAN:    ${lan}`,
-      `  unread: ${status.unread}`,
-      "",
-    ].join("\n"),
-  );
+  const lines = [
+    `pingpal: @${status.handle} is up`,
+    `  relay:  ${status.relayUrl} (${relay})`,
+    `  LAN:    ${lan}`,
+    `  unread: ${status.unread}`,
+  ];
+  if (status.authError) {
+    lines.push(
+      `  🔒 room rejected: ${status.authError}`,
+      `     re-join with: pingpal join ${status.roomCode} --password <pw>`,
+    );
+  }
+  lines.push("");
+  process.stdout.write(lines.join("\n"));
+  if (status.authError) return 1; // rejected → no roster to show
 
   try {
     const { peers } = await sendRequest(paths, "getPresence");

@@ -16,6 +16,8 @@ export interface JoinOptions {
   relay?: string;
   /** Face id; otherwise prompted (newcomer) or kept (returning user). */
   face?: string;
+  /** Room password (if the room has one). Persisted to config. */
+  password?: string;
 }
 
 const relayUrlSchema = z
@@ -76,7 +78,13 @@ export async function joinCommand(
   }
 
   try {
-    const config = await updateConfig(paths, { roomCode, handle, faceId, relayUrl: relay });
+    const config = await updateConfig(paths, {
+      roomCode,
+      handle,
+      faceId,
+      relayUrl: relay,
+      ...(opts.password ? { password: opts.password } : {}),
+    });
     if (interactive && newcomer) {
       process.stdout.write(
         `\n${facePreview(config.faceId, config.handle)}  you're set as @${config.handle}\n`,

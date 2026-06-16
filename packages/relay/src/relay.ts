@@ -141,6 +141,14 @@ export function startRelay(opts: RelayOptions = {}): Promise<RelayHandle> {
         sendError(conn.ws, "already_joined", "this connection has already joined a room");
         return;
       }
+      // Password gate: the first joiner sets the room's expected proof; everyone
+      // after must match. A wrong/missing proof is rejected here — so guessing
+      // room codes can't get you into a password-protected room. (The relay
+      // never sees the raw password, only the proof.)
+      if (registry.checkAuth(env.roomCode, env.roomAuth) === "denied") {
+        sendError(conn.ws, "auth_failed", "wrong or missing room password");
+        return;
+      }
       conn.roomCode = env.roomCode;
       conn.handle = env.handle;
       conn.faceId = env.faceId;

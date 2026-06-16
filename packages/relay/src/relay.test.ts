@@ -90,12 +90,13 @@ class TestClient {
   }
 }
 
-const hello = (roomCode: string, handle: string): Envelope => ({
+const hello = (roomCode: string, handle: string, roomAuth?: string): Envelope => ({
   type: "hello",
   roomCode,
   handle,
   faceId: "fox",
   clientVersion: "test",
+  ...(roomAuth ? { roomAuth } : {}),
 });
 
 describe("@pingpal/relay integration", () => {
@@ -158,6 +159,39 @@ describe("@pingpal/relay integration", () => {
 
     alice.close();
     bob.close();
+  });
+
+  it("password-gates a room: first joiner sets it, wrong/missing proof is rejected", async () => {
+    relay = await startRelay({ port: 0 });
+    const room = "locked-room-9999";
+    const PROOF = "the-correct-proof";
+
+    // First joiner establishes the room's password proof.
+    const owner = await TestClient.connect(relay.port);
+    owner.send(hello(room, "owner", PROOF));
+    await owner.waitType("presence", (p) => p.peers.some((x) => x.handle === "owner"));
+
+    // A brute-forcer guesses the room code but has no/wrong proof → auth_failed,
+    // and must NOT appear in presence.
+    const attacker = await TestClient.connect(relay.port);
+    attacker.send(hello(room, "attacker", "wrong-proof"));
+    const err = await attacker.waitType("error");
+    expect(err.code).toBe("auth_failed");
+
+    const noProof = await TestClient.connect(relay.port);
+    noProof.send(hello(room, "sneaky")); // no roomAuth at all
+    expect((await noProof.waitType("error")).code).toBe("auth_failed");
+
+    // A legit joiner with the right proof gets in.
+    const friend = await TestClient.connect(relay.port);
+    friend.send(hello(room, "friend", PROOF));
+    const roster = await friend.waitType("presence", (p) => p.peers.length === 2);
+    expect(roster.peers.map((x) => x.handle).sort()).toEqual(["friend", "owner"]);
+    // The rejected handles never made it into the room.
+    expect(roster.peers.some((x) => x.handle === "attacker")).toBe(false);
+
+    owner.close();
+    friend.close();
   });
 
   it("rejects oversized text and malformed frames with an error envelope", async () => {

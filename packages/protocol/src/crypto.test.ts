@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { deriveRoomKey, seal, open, looksSealed } from "./crypto.js";
+import { deriveRoomKey, roomAuthProof, seal, open, looksSealed } from "./crypto.js";
 
 describe("E2E crypto", () => {
   it("round-trips a message with the same room code", () => {
@@ -44,5 +44,34 @@ describe("E2E crypto", () => {
   it("looksSealed recognises our blobs and rejects plaintext", () => {
     expect(looksSealed(seal("x", deriveRoomKey("r")))).toBe(true);
     expect(looksSealed("just a normal message")).toBe(false);
+  });
+});
+
+describe("room password", () => {
+  it("password folds into the key: wrong/absent password can't decrypt", () => {
+    const blob = seal("secret", deriveRoomKey("room1", "hunter2"));
+    expect(open(blob, deriveRoomKey("room1", "hunter2"))).toBe("secret"); // right pw
+    expect(open(blob, deriveRoomKey("room1", "wrong"))).toBeNull(); // wrong pw
+    expect(open(blob, deriveRoomKey("room1"))).toBeNull(); // no pw (guessed code only)
+  });
+
+  it("code+password binding has no separator collisions", () => {
+    // (code="ab", pw="c") must NOT equal (code="a", pw="bc")
+    expect(deriveRoomKey("ab", "c").equals(deriveRoomKey("a", "bc"))).toBe(false);
+  });
+
+  it("roomAuthProof: null without a password, stable + room-scoped with one", () => {
+    expect(roomAuthProof("room1")).toBeNull();
+    expect(roomAuthProof("room1", "")).toBeNull();
+    const p = roomAuthProof("room1", "pw");
+    expect(p).toBe(roomAuthProof("room1", "pw")); // deterministic
+    expect(p).not.toBe(roomAuthProof("room2", "pw")); // same pw, different room → different proof
+    expect(p).not.toBe(roomAuthProof("room1", "pw2")); // different pw → different proof
+  });
+
+  it("the auth proof is not the encryption key (distinct derivations)", () => {
+    const proof = roomAuthProof("r", "pw");
+    const key = deriveRoomKey("r", "pw").toString("hex");
+    expect(proof).not.toBe(key);
   });
 });
