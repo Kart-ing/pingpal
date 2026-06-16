@@ -131,7 +131,8 @@ That's the whole sign-up: one command, two prompts, in.
 | Command | What it does |
 | --- | --- |
 | `pingpal init` | Prompt for handle / room / face, write `~/.pingpal/config.json`, install the Claude Code notification **hook**, and register the **MCP server**. Fully idempotent. |
-| `pingpal join <room>` | Join a room from an invite (guided first-run: prompts for handle + face), or switch rooms. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
+| `pingpal join <room>` | Join a room from an invite (guided first-run: prompts for handle + face), or **switch rooms**. `--relay <url>` carries the invite's relay; `--handle` / `--face` skip the prompts. |
+| `pingpal leave` | Leave the current room — stops the daemon and clears the room from config (keeps your handle + face). Rejoin with `pingpal join <room>`. |
 | `pingpal invite` | Print a shareable invite — room code + relay + a copy-paste `join` command. The one place the room code is shown in full. `--short` for just the command. |
 | `pingpal start` | Start the background daemon (`pingpald`) if it isn't already up. |
 | `pingpal stop` | Stop the daemon. |

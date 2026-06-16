@@ -21,6 +21,7 @@ import { statuslineCommand } from "./commands/statusline.js";
 import { chatCommand } from "./commands/chat.js";
 import { launchCommand } from "./commands/launch.js";
 import { inviteCommand } from "./commands/invite.js";
+import { leaveCommand } from "./commands/leave.js";
 
 const paths = resolvePaths();
 
@@ -94,6 +95,11 @@ program
   .command("stop")
   .description("stop the background daemon")
   .action(() => run(() => stopDaemon(paths)));
+
+program
+  .command("leave")
+  .description("leave the current room (stops the daemon, clears the room from config)")
+  .action(() => run(() => leaveCommand(paths)));
 
 program
   .command("status")

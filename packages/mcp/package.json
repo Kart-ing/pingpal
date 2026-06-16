@@ -1,6 +1,6 @@
 {
   "name": "@pingpal/mcp",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "PingPal MCP server (stdio) — exposes whos_online / list_pings / send_ping to Claude Code, talking to the local pingpald daemon over IPC.",
   "license": "MIT",
   "type": "module",

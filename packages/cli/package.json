@@ -1,6 +1,6 @@
 {
   "name": "pingpal",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "PingPal — ambient messaging for CLI coders. Little ASCII faces + 90-char pings that surface inside your Claude Code session.",
   "license": "MIT",
   "type": "module",

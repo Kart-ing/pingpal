@@ -1,6 +1,6 @@
 {
   "name": "@pingpal/daemon",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "pingpald — the per-machine PingPal daemon: relay client, mDNS LAN discovery, presence, ping buffer, and a local Unix-socket IPC server.",
   "license": "MIT",
   "type": "module",
