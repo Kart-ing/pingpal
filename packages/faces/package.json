@@ -1,6 +1,6 @@
 {
   "name": "@pingpal/faces",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Charming ASCII face + message-bubble renderer for PingPal. Pure functions, no I/O.",
   "license": "MIT",
   "type": "module",

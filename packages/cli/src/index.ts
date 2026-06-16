@@ -5,8 +5,13 @@
  * lifecycle (`start`/`stop`/`status`), and `whoami`. The heavy lifting lives in
  * `@pingpal/daemon` (presence, relay, IPC) — this is a thin, friendly front.
  */
+import { createRequire } from "node:module";
 import { Command } from "commander";
 import { resolvePaths } from "@pingpal/daemon";
+
+// Read the real version from our package.json so it never drifts from what's
+// published (a hardcoded string silently lies after a version bump).
+const pkg = createRequire(import.meta.url)("../package.json") as { version: string };
 import { initCommand, type InitOptions } from "./commands/init.js";
 import { joinCommand } from "./commands/join.js";
 import { startDaemon, statusDaemon, stopDaemon } from "./commands/daemon-control.js";
@@ -34,7 +39,7 @@ const program = new Command();
 program
   .name("pingpal")
   .description("Ambient messaging for CLI coders — ASCII faces + 90-char pings inside Claude Code.")
-  .version("0.1.0");
+  .version(pkg.version);
 
 program
   .command("init")

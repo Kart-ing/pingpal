@@ -1,6 +1,6 @@
 {
   "name": "@pingpal/protocol",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Shared wire protocol for PingPal — zod schemas, types, 90-char validation, and NDJSON framing.",
   "license": "MIT",
   "type": "module",

@@ -1,6 +1,6 @@
 {
   "name": "@pingpal/relay",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Self-hostable WebSocket relay for PingPal — rooms, presence, and ping routing, all in memory.",
   "license": "MIT",
   "type": "module",

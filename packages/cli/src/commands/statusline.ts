@@ -69,6 +69,19 @@ export async function statuslineCommand(paths: PingPalPaths): Promise<number> {
     /* roster optional */
   }
 
+  // Latest INCOMING ping, as a peek — markRead:false so the in-session hook
+  // still surfaces it. We never consume; the bar is a glance, `pingpal chat` is
+  // where you actually read + reply.
+  let latest: { from: string; text: string } | null = null;
+  try {
+    const res = await sendRequest(paths, "getPings", { markRead: false });
+    const incoming = res.pings.filter((p) => p && !p.outbound && p.from !== handle);
+    const last = incoming[incoming.length - 1];
+    if (last && last.text) latest = { from: last.from, text: last.text };
+  } catch {
+    /* ping peek optional */
+  }
+
   const label = paint("PingPal", DIM, useColor);
   let line: string;
   if (peers.length === 0) {
@@ -86,6 +99,15 @@ export async function statuslineCommand(paths: PingPalPaths): Promise<number> {
   }
   if (unread > 0) {
     line += `  ${paint(`📨${unread}`, CYAN, useColor)}`;
+  }
+  // Append the latest ping inline. Truncated so a long message can't blow out
+  // the single-line status bar.
+  if (latest) {
+    const max = 48;
+    const text =
+      latest.text.length > max ? latest.text.slice(0, max - 1) + "…" : latest.text;
+    const who = paint(latest.from, CYAN, useColor);
+    line += `  ${paint("│", DIM, useColor)} ${paint("💬", "", useColor)} ${who}: ${paint(text, DIM, useColor)}`;
   }
 
   process.stdout.write(line);
